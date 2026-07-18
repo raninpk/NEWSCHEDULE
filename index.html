@@ -450,6 +450,7 @@ tr:hover td{background:var(--gray-50)}
 const SUPABASE_URL  = 'https://kxfmwacpsxzghsogrgap.supabase.co';   // ← paste here
 const SUPABASE_KEY  = 'sb_publishable_PEECl_Y8-YJywpj6htdUFQ_t_ksDCOx';      // ← paste here
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+let staff = DEFAULT_STAFF;
 
 // ── Load all data from Supabase ──
 async function loadAllData() {
