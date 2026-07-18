@@ -1,0 +1,1562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reception Duty Scheduler</title>
+<style>
+@import url("https://unpkg.com/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css");
+</style>
+<style>
+:root {
+  --primary:#185FA5; --primary-light:#E6F1FB; --primary-mid:#378ADD;
+  --success:#3B6D11; --success-light:#EAF3DE;
+  --warning:#854F0B; --warning-light:#FAEEDA;
+  --danger:#A32D2D; --danger-light:#FCEBEB;
+  --purple:#534AB7; --purple-light:#EEEDFE;
+  --teal:#0F6E56; --teal-light:#E1F5EE;
+  --coral:#993C1D; --coral-light:#FAECE7;
+  --amber:#BA7517; --amber-light:#FAEEDA;
+  --gray-50:#F7F6F3; --gray-100:#EDEDEB; --gray-200:#D3D1C7;
+  --gray-400:#888780; --gray-600:#5F5E5A; --gray-900:#2C2C2A;
+  --bg:#F7F6F3; --surface:#FFFFFF;
+  --text:#2C2C2A; --text-muted:#5F5E5A;
+  --border:rgba(44,44,42,0.15); --border-em:rgba(44,44,42,0.25);
+  --radius:10px; --radius-sm:6px; --shadow:0 1px 3px rgba(0,0,0,0.08);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.5}
+.app{display:flex;height:100vh;overflow:hidden}
+.sidebar{width:220px;min-width:220px;background:var(--surface);border-right:0.5px solid var(--border-em);display:flex;flex-direction:column;overflow-y:auto}
+.main{flex:1;overflow-y:auto;display:flex;flex-direction:column}
+.sidebar-logo{padding:20px 16px 12px;border-bottom:0.5px solid var(--border)}
+.sidebar-logo h1{font-size:15px;font-weight:600;color:var(--text)}
+.sidebar-logo p{font-size:11px;color:var(--text-muted);margin-top:1px}
+.sidebar-nav{padding:8px;flex:1}
+.nav-section{font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;padding:12px 8px 4px}
+.nav-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;color:var(--text-muted);transition:all .15s;margin-bottom:1px}
+.nav-item:hover{background:var(--gray-50);color:var(--text)}
+.nav-item.active{background:var(--primary-light);color:var(--primary);font-weight:500}
+.nav-item i{font-size:16px}
+.sidebar-stats{padding:12px;border-top:0.5px solid var(--border)}
+.stat-mini{background:var(--gray-50);border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:6px}
+.stat-mini-label{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em}
+.stat-mini-val{font-size:20px;font-weight:600;color:var(--text)}
+.stat-mini-val span{font-size:11px;font-weight:400;color:var(--text-muted)}
+.page-header{background:var(--surface);border-bottom:0.5px solid var(--border);padding:16px 24px;display:flex;align-items:center;gap:12px}
+.page-header h2{font-size:17px;font-weight:600;flex:1}
+.page-header p{font-size:12px;color:var(--text-muted);margin-top:2px}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--radius-sm);border:0.5px solid var(--border-em);background:transparent;cursor:pointer;font-size:13px;font-weight:500;color:var(--text);transition:all .15s;white-space:nowrap}
+.btn:hover{background:var(--gray-50)}
+.btn:active{transform:scale(.98)}
+.btn-primary{background:var(--primary);color:#fff;border-color:var(--primary)}
+.btn-primary:hover{background:#0C447C;border-color:#0C447C}
+.btn-success{background:var(--success);color:#fff;border-color:var(--success)}
+.btn-success:hover{background:#27500A}
+.btn-danger{color:var(--danger);border-color:rgba(163,45,45,.3)}
+.btn-danger:hover{background:var(--danger-light)}
+.btn-sm{padding:4px 10px;font-size:12px}
+.btn i{font-size:15px}
+.content{padding:24px;flex:1}
+.page{display:none}
+.page.active{display:block}
+.card{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius);padding:16px 20px;margin-bottom:16px;box-shadow:var(--shadow)}
+.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.card-title{font-size:14px;font-weight:600}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px}
+.stat-card{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow)}
+.stat-label{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+.stat-val{font-size:26px;font-weight:600;line-height:1}
+.stat-sub{font-size:11px;color:var(--text-muted);margin-top:3px}
+.stat-card.blue .stat-val{color:var(--primary)}
+.stat-card.green .stat-val{color:var(--success)}
+.stat-card.amber .stat-val{color:var(--warning)}
+.stat-card.red .stat-val{color:var(--danger)}
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:9px 12px;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;border-bottom:0.5px solid var(--border-em);background:var(--gray-50)}
+td{padding:10px 12px;border-bottom:0.5px solid var(--border);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--gray-50)}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500}
+.badge-available{background:var(--success-light);color:var(--success)}
+.badge-leave{background:var(--warning-light);color:var(--warning)}
+.badge-absent{background:var(--danger-light);color:var(--danger)}
+.badge-supervisor{background:var(--purple-light);color:var(--purple)}
+.badge-teamlead{background:var(--teal-light);color:var(--teal)}
+.badge-special{background:var(--primary-light);color:var(--primary)}
+
+/* ---- DUTY TYPE CELLS ---- */
+.duty-straight{background:var(--primary-light);color:var(--primary);border-radius:5px;padding:3px 7px;font-size:11px;font-weight:600;display:inline-block;white-space:nowrap}
+.duty-split{background:var(--coral-light);color:var(--coral);border-radius:5px;padding:3px 7px;font-size:11px;font-weight:600;display:inline-block;white-space:nowrap}
+.duty-off{color:var(--gray-400);font-size:12px;display:inline-block}
+.duty-leave{background:var(--warning-light);color:var(--warning);border-radius:5px;padding:3px 7px;font-size:11px;font-style:italic;display:inline-block}
+.duty-absent{background:var(--danger-light);color:var(--danger);border-radius:5px;padding:3px 7px;font-size:11px;font-style:italic;display:inline-block}
+
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form-group{display:flex;flex-direction:column;gap:4px}
+.form-group label{font-size:12px;font-weight:500;color:var(--text-muted)}
+.form-group input,.form-group select,.form-group textarea{padding:8px 10px;border:0.5px solid var(--border-em);border-radius:var(--radius-sm);font-size:13px;color:var(--text);background:var(--surface);transition:border .15s;width:100%}
+.form-group input:focus,.form-group select:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 2px rgba(24,95,165,.1)}
+.form-full{grid-column:1/-1}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px}
+.modal-overlay.hidden{display:none}
+.modal{background:var(--surface);border-radius:var(--radius);width:100%;max-width:520px;box-shadow:0 8px 30px rgba(0,0,0,.15)}
+.modal-header{padding:16px 20px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.modal-header h3{font-size:15px;font-weight:600}
+.modal-body{padding:20px}
+.modal-footer{padding:12px 20px;border-top:0.5px solid var(--border);display:flex;justify-content:flex-end;gap:8px}
+
+/* Schedule table */
+.schedule-grid{overflow-x:auto}
+.schedule-table{min-width:760px;width:100%;border-collapse:collapse;font-size:12px}
+.schedule-table th{padding:8px 10px;background:var(--gray-50);border:0.5px solid var(--border);text-align:center;font-size:10px;white-space:nowrap}
+.schedule-table td{padding:6px 8px;border:0.5px solid var(--border);text-align:center;white-space:nowrap}
+.schedule-table td.staff-name{text-align:left;font-weight:500;min-width:140px;background:var(--gray-50);padding:6px 10px}
+
+/* Day detail */
+.duty-block{background:var(--gray-50);border:0.5px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:10px}
+.duty-block-header{font-size:13px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.staff-chips{display:flex;flex-wrap:wrap;gap:8px}
+.staff-chip{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-sm);padding:7px 12px;font-size:12px}
+.staff-chip strong{display:block;font-size:13px;font-weight:500}
+.staff-chip span{color:var(--text-muted);font-size:11px}
+
+.coverage-bar{display:flex;align-items:center;gap:8px;margin:6px 0}
+.coverage-label{font-size:12px;min-width:80px;color:var(--text-muted)}
+.coverage-track{flex:1;height:8px;background:var(--gray-100);border-radius:4px;overflow:hidden}
+.coverage-fill{height:100%;border-radius:4px;transition:width .3s}
+.coverage-fill.ok{background:var(--success)}
+.coverage-fill.warn{background:#EF9F27}
+.coverage-fill.low{background:var(--danger)}
+.coverage-count{font-size:12px;font-weight:500;min-width:24px;text-align:right}
+.alert{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:var(--radius-sm);margin-bottom:12px;font-size:13px}
+.alert-warning{background:var(--warning-light);color:#5A3600;border:0.5px solid rgba(133,79,11,.25)}
+.alert-danger{background:var(--danger-light);color:#5A1A1A;border:0.5px solid rgba(163,45,45,.25)}
+.alert-success{background:var(--success-light);color:#1A3A08;border:0.5px solid rgba(59,109,17,.25)}
+.alert-info{background:var(--primary-light);color:#062040;border:0.5px solid rgba(24,95,165,.25)}
+.alert i{font-size:16px;margin-top:1px;flex-shrink:0}
+.rule-item{display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:0.5px solid var(--border)}
+.rule-item:last-child{border-bottom:none}
+.rule-icon{width:32px;height:32px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px}
+.rule-content{flex:1}
+.rule-title{font-size:13px;font-weight:500;margin-bottom:2px}
+.rule-desc{font-size:12px;color:var(--text-muted)}
+.toggle{position:relative;width:36px;height:20px}
+.toggle input{opacity:0;width:0;height:0}
+.toggle-slider{position:absolute;cursor:pointer;inset:0;background:var(--gray-200);border-radius:20px;transition:.2s}
+.toggle-slider:before{content:'';position:absolute;width:14px;height:14px;left:3px;top:3px;background:white;border-radius:50%;transition:.2s}
+.toggle input:checked+.toggle-slider{background:var(--primary)}
+.toggle input:checked+.toggle-slider:before{transform:translateX(16px)}
+.tabs{display:flex;gap:0;border-bottom:0.5px solid var(--border);margin-bottom:20px}
+.tab{padding:10px 16px;font-size:13px;cursor:pointer;border-bottom:2px solid transparent;color:var(--text-muted);transition:all .15s;font-weight:500}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--primary);border-bottom-color:var(--primary)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--text-muted);margin-top:10px;align-items:center}
+.legend-item{display:flex;align-items:center;gap:5px}
+.empty-state{text-align:center;padding:48px 24px;color:var(--text-muted)}
+.empty-state i{font-size:40px;margin-bottom:12px;display:block;opacity:.4}
+.empty-state h3{font-size:15px;font-weight:500;color:var(--text);margin-bottom:6px}
+.hidden{display:none!important}
+/* Split duty visual pill */
+.split-pill{display:inline-flex;gap:0;border-radius:5px;overflow:hidden;font-size:11px;font-weight:600;vertical-align:middle}
+.split-pill span{padding:2px 5px}
+.split-am{background:var(--primary-light);color:var(--primary)}
+.split-pm{background:var(--coral-light);color:var(--coral)}
+@media(max-width:768px){
+  .sidebar{width:60px;min-width:60px}
+  .sidebar-logo p,.nav-item span,.sidebar-stats{display:none}
+  .nav-item{justify-content:center}
+  .form-grid{grid-template-columns:1fr}
+}
+@media print{
+  .sidebar,.page-header .btn,.modal-overlay{display:none!important}
+  .main{overflow:visible}
+  .app{display:block;height:auto}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <h1><span class="svg-icon" aria-hidden="true" style="font-size:16px;vertical-align:-2px;margin-right:4px;color:var(--primary)"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="16" rx="2"/><line x1="16" y1="3" x2="16" y2="7"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="4" y1="11" x2="20" y2="11"/><rect x="8" y="15" width="2" height="2"/></svg></span></i>DutyPlan</h1>
+    <p>Reception Scheduler</p>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="nav-section">Main</div>
+    <div class="nav-item active" onclick="showPage('dashboard')" id="nav-dashboard"><span class="svg-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></svg></span></i><span>Dashboard</span></div>
+    <div class="nav-item" onclick="showPage('staff')" id="nav-staff"><span class="svg-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><path d="M21 21v-2a4 4 0 0 0-3-3.85"/></svg></span></i><span>Staff</span></div>
+    <div class="nav-section">Schedule</div>
+    <div class="nav-item" onclick="showPage('schedule')" id="nav-schedule"><span class="svg-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="16" rx="2"/><line x1="16" y1="3" x2="16" y2="7"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="4" y1="11" x2="20" y2="11"/><line x1="8" y1="15" x2="8" y2="15"/><line x1="12" y1="15" x2="12" y2="15"/><line x1="16" y1="15" x2="16" y2="15"/></svg></span></i><span>Schedule</span></div>
+    <div class="nav-item" onclick="showPage('rules')" id="nav-rules"><span class="svg-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span></i><span>Rules</span></div>
+    <div class="nav-section">Reports</div>
+    <div class="nav-item" onclick="showPage('reports')" id="nav-reports"><span class="svg-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="12" width="4" height="8"/><rect x="9" y="8" width="4" height="12"/><rect x="15" y="4" width="4" height="16"/><line x1="3" y1="20" x2="19" y2="20"/></svg></span></i><span>Reports</span></div>
+  </nav>
+  <div class="sidebar-stats">
+    <div class="stat-mini"><div class="stat-mini-label">Available</div><div class="stat-mini-val" id="sb-available">0 <span>staff</span></div></div>
+    <div class="stat-mini"><div class="stat-mini-label">On duty today</div><div class="stat-mini-val" id="sb-onduty">0 <span>assigned</span></div></div>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="page-header">
+    <div style="flex:1">
+      <h2 id="page-title">Dashboard</h2>
+      <p id="page-sub">Reception duty scheduling overview</p>
+    </div>
+    <div id="page-actions" style="display:flex;gap:8px;align-items:center"></div>
+  </div>
+  <div class="content">
+
+    <!-- DASHBOARD -->
+    <div class="page active" id="page-dashboard">
+      <div class="stats-grid" id="dash-stats"></div>
+      <div id="dash-alerts"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Today's duty coverage</span></div>
+          <div id="dash-coverage"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Staff availability</span></div>
+          <div id="dash-avail-chart"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Today's duty assignments</span>
+          <button class="btn btn-sm btn-primary" onclick="showPage('schedule')"><span class="svg-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="16" rx="2"/><line x1="16" y1="3" x2="16" y2="7"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="4" y1="11" x2="20" y2="11"/><line x1="8" y1="15" x2="8" y2="15"/><line x1="12" y1="15" x2="12" y2="15"/><line x1="16" y1="15" x2="16" y2="15"/></svg></span></i> Full schedule</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Staff member</th><th>Designation</th><th>Duty type</th><th>Hours</th><th>Role</th></tr></thead>
+            <tbody id="dash-today-table"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- STAFF -->
+    <div class="page" id="page-staff">
+      <div style="margin-bottom:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="text" id="staff-search" placeholder="Search staff…" style="padding:7px 12px;border:0.5px solid var(--border-em);border-radius:var(--radius-sm);font-size:13px;width:220px" oninput="renderStaffTable()">
+        <select id="staff-filter-status" style="padding:7px 10px;border:0.5px solid var(--border-em);border-radius:var(--radius-sm);font-size:13px" onchange="renderStaffTable()">
+          <option value="">All statuses</option>
+          <option value="Available">Available</option>
+          <option value="Leave">On Leave</option>
+          <option value="Absent">Absent</option>
+        </select>
+      </div>
+      <div class="card" style="padding:0">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Employee</th><th>ID</th><th>Department</th><th>Designation</th><th>Status</th><th>Role</th><th>Notes</th><th style="width:80px">Actions</th></tr></thead>
+            <tbody id="staff-table-body"></tbody>
+          </table>
+        </div>
+        <div id="staff-empty" class="empty-state hidden">
+          <span class="svg-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><path d="M21 21v-2a4 4 0 0 0-3-3.85"/></svg></span></i><h3>No staff found</h3><p>Add staff or adjust filters.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCHEDULE -->
+    <div class="page" id="page-schedule">
+      <div id="schedule-alerts" style="margin-bottom:12px"></div>
+      <div style="display:flex;gap:10px;align-items:flex-end;margin-bottom:16px;flex-wrap:wrap">
+        <div>
+          <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:3px">Week starting</label>
+          <input type="date" id="week-start" style="padding:7px 10px;border:0.5px solid var(--border-em);border-radius:var(--radius-sm);font-size:13px" onchange="renderSchedule()">
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn" onclick="prevWeek()"><span class="svg-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></span></i></button>
+          <button class="btn" onclick="nextWeek()"><span class="svg-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span></i></button>
+        </div>
+      </div>
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab('weekly',this)">Weekly view</div>
+        <div class="tab" onclick="switchTab('daily',this)">Daily detail</div>
+      </div>
+      <div id="tab-weekly">
+        <div class="card" style="padding:0"><div class="schedule-grid"><table class="schedule-table" id="weekly-table"></table></div></div>
+        <div class="legend">
+          <div class="legend-item"><span class="duty-straight" style="background:#FFF3CD;color:#7A5C00">STR-O</span> Open 07:00–15:30 <span style="font-size:10px;color:var(--warning)">(solo 07–08)</span></div>
+          <div class="legend-item"><span class="duty-straight">STR-M</span> Mid 09:00–17:30</div>
+          <div class="legend-item"><span class="duty-straight" style="background:var(--teal-light);color:var(--teal)">STR-A</span> Aft 13:00–21:30</div>
+          <div class="legend-item"><span class="duty-straight" style="background:var(--purple-light);color:var(--purple)">STR-C</span> Close 15:30–00:00 <span style="font-size:10px;color:var(--warning)">(solo 22:30–00)</span></div>
+          <div class="legend-item"><span class="split-pill"><span class="split-am">AM</span><span class="split-pm">PM</span></span> Split 07–12 & 19–00</div>
+          <div class="legend-item"><span style="color:var(--gray-400);font-size:13px">●</span> Day off</div>
+          <div class="legend-item"><span style="color:var(--warning)">■</span> Leave</div>
+          <div class="legend-item"><span style="color:var(--danger)">■</span> Absent</div>
+        </div>
+      </div>
+      <div id="tab-daily" style="display:none">
+        <div style="margin-bottom:14px">
+          <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:3px">Select day</label>
+          <select id="day-select" style="padding:7px 10px;border:0.5px solid var(--border-em);border-radius:var(--radius-sm);font-size:13px;width:200px" onchange="renderDailyDetail()"></select>
+        </div>
+        <div id="daily-detail-content"></div>
+      </div>
+    </div>
+
+    <!-- RULES -->
+    <div class="page" id="page-rules">
+      <div class="card">
+        <div class="card-header"><span class="card-title">Duty type configuration</span></div>
+        <div style="background:var(--gray-50);border-radius:var(--radius-sm);padding:14px 16px;margin-bottom:16px;font-size:13px">
+          <div style="font-weight:600;margin-bottom:10px">Duty types active in this system</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div style="background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-sm);padding:12px">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span class="duty-straight">STRAIGHT</span></div>
+              <div style="font-size:12px;color:var(--text-muted)">One continuous block of 8h 30m. Staff works a single unbroken shift within the operating window (07:00–00:00).</div>
+              <div style="margin-top:8px;font-size:12px"><span style="font-weight:500">Shifts:</span> Open (07:00–15:30) · Mid (09:00–17:30) · Aft (13:00–21:30) · Close (15:30–00:00)</div>
+              <div style="margin-top:4px;font-size:11px;color:var(--warning);font-weight:500">⚡ Solo zones: Open staff covers 07–08 alone · Close staff covers 22:30–00 alone</div>
+            </div>
+            <div style="background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-sm);padding:12px">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span class="split-pill"><span class="split-am">AM</span><span class="split-pm">PM</span></span> <span style="font-size:12px;font-weight:600">SPLIT</span></div>
+              <div style="font-size:12px;color:var(--text-muted)">Two separate duty blocks in one day — a morning session and an evening session — with a break in between.</div>
+              <div style="margin-top:8px;font-size:12px"><span style="font-weight:500">AM block:</span> 07:00–12:00 · <span style="font-weight:500">PM block:</span> 19:00–00:00</div>
+            </div>
+          </div>
+        </div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Minimum staff per slot</label>
+            <input type="number" id="cfg-min-staff" value="2" min="1" max="10">
+          </div>
+          <div class="form-group">
+            <label>Max consecutive duty days</label>
+            <input type="number" id="cfg-max-days" value="5" min="1" max="7">
+          </div>
+          <div class="form-group">
+            <label>Rotation period (weeks)</label>
+            <input type="number" id="cfg-rotation" value="4" min="1" max="12">
+          </div>
+          <div class="form-group">
+            <label>Split duty ratio (per 10 staff-days)</label>
+            <input type="number" id="cfg-split-ratio" value="3" min="0" max="10">
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Scheduling rules</span></div>
+        <div id="rules-list"></div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Custom conditions</span>
+          <button class="btn btn-sm btn-primary" onclick="openAddCondition()"><span class="svg-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span></i> Add condition</button>
+        </div>
+        <div id="custom-conditions-list"></div>
+      </div>
+    </div>
+
+    <!-- REPORTS -->
+    <div class="page" id="page-reports">
+      <div class="stats-grid" id="report-stats"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div class="card"><div class="card-header"><span class="card-title">Workload distribution</span></div><div id="workload-chart"></div></div>
+        <div class="card"><div class="card-header"><span class="card-title">Duty type breakdown</span></div><div id="duty-type-chart"></div></div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Weekly staff duty log</span>
+          <button class="btn btn-sm btn-success" onclick="exportReport()"><span class="svg-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span></i> Download Excel</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Staff</th><th>Role</th><th>Straight</th><th>Split</th><th>Total duty days</th><th>Day off</th><th>Leave/Absent</th></tr></thead>
+            <tbody id="report-table"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</div>
+
+<!-- Modal: Staff -->
+<div class="modal-overlay hidden" id="staff-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="staff-modal-title">Add staff member</h3>
+      <button class="btn btn-sm" onclick="closeModal('staff-modal')"><span class="svg-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span></i></button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group"><label>Employee name *</label><input type="text" id="sf-name" placeholder="Full name"></div>
+        <div class="form-group"><label>Employee ID *</label><input type="text" id="sf-id" placeholder="EMP001"></div>
+        <div class="form-group"><label>Department</label><input type="text" id="sf-dept" placeholder="Reception"></div>
+        <div class="form-group"><label>Designation</label>
+          <select id="sf-desig">
+            <option>Receptionist</option><option>Senior Receptionist</option>
+            <option>Team Leader</option><option>Supervisor</option>
+            <option>Guest Relations Officer</option><option>Front Desk Agent</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Availability</label>
+          <select id="sf-status"><option value="Available">Available</option><option value="Leave">On Leave</option><option value="Absent">Absent</option></select>
+        </div>
+        <div class="form-group"><label>Role classification</label>
+          <select id="sf-role"><option value="">Staff</option><option value="Supervisor">Supervisor</option><option value="Team Leader">Team Leader</option><option value="Special Duty">Special Duty</option></select>
+        </div>
+        <div class="form-group form-full"><label>Special conditions / notes</label>
+          <textarea id="sf-notes" rows="2" placeholder="e.g. Prefers no split duty, medical accommodation…" style="resize:vertical"></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('staff-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveStaff()"><span class="svg-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></i> Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Condition -->
+<div class="modal-overlay hidden" id="condition-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Add custom condition</h3>
+      <button class="btn btn-sm" onclick="closeModal('condition-modal')"><span class="svg-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span></i></button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group form-full"><label>Condition name</label><input type="text" id="cond-name" placeholder="e.g. No consecutive split duties"></div>
+        <div class="form-group form-full"><label>Description</label><textarea id="cond-desc" rows="2" style="resize:vertical"></textarea></div>
+        <div class="form-group"><label>Applies to</label>
+          <select id="cond-applies"><option>All staff</option><option>Supervisors only</option><option>Team Leaders only</option><option>Specific employee</option></select>
+        </div>
+        <div class="form-group"><label>Priority</label>
+          <select id="cond-priority"><option>High</option><option selected>Medium</option><option>Low</option></select>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('condition-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveCondition()"><span class="svg-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></i> Add</button>
+    </div>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+// ===================== STORAGE =====================
+// ===================== STORAGE — Supabase =====================
+const SUPABASE_URL  = 'YOUR_PROJECT_URL';   // ← paste here
+const SUPABASE_KEY  = 'YOUR_ANON_KEY';      // ← paste here
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ── Load all data from Supabase ──
+async function loadAllData() {
+  const [
+    { data: staffData },
+    { data: configData },
+    { data: condData },
+    { data: schedData }
+  ] = await Promise.all([
+    sb.from('staff').select('*').order('id'),
+    sb.from('app_config').select('*').eq('id', 1).single(),
+    sb.from('conditions').select('*').order('id'),
+    sb.from('schedule').select('*')
+  ]);
+
+  // Remap schedule rows → { 'YYYY-MM-DD': { staffId: dutyType } }
+  const scheduleMap = {};
+  (schedData || []).forEach(row => {
+    if (!scheduleMap[row.date]) scheduleMap[row.date] = {};
+    scheduleMap[row.date][row.staff_id] = row.duty_type;
+  });
+
+  return {
+    staff:            (staffData || []).map(remapStaff),
+    config:           configData ? remapConfig(configData) : null,
+    customConditions: condData || [],
+    schedule:         scheduleMap,
+    ruleStates:       []
+  };
+}
+
+// Column name remappers (Supabase uses snake_case)
+function remapStaff(r) {
+  return { id:r.id, name:r.name, empId:r.emp_id, dept:r.dept,
+           desig:r.desig, status:r.status, role:r.role||'', notes:r.notes||'' };
+}
+function remapConfig(r) {
+  return { minStaff:r.min_staff, maxDays:r.max_days, rotation:r.rotation, splitRatio:r.split_ratio };
+}
+
+// ── Save all data to Supabase ──
+async function persistAll() {
+  showSaveFlash('Saving…');
+  try {
+    // Upsert staff
+    await sb.from('staff').upsert(
+      staff.map(s => ({ id:s.id, name:s.name, emp_id:s.empId, dept:s.dept,
+                        desig:s.desig, status:s.status, role:s.role, notes:s.notes }))
+    );
+
+    // Update config
+    await sb.from('app_config').upsert({
+      id:1, min_staff:config.minStaff, max_days:config.maxDays,
+      rotation:config.rotation, split_ratio:config.splitRatio
+    });
+
+    // Upsert conditions
+    if (customConditions.length > 0) {
+      await sb.from('conditions').upsert(customConditions);
+    }
+
+    // Upsert schedule rows
+    const schedRows = [];
+    Object.entries(schedule).forEach(([date, dayMap]) => {
+      Object.entries(dayMap).forEach(([staffId, dutyType]) => {
+        schedRows.push({ date, staff_id: parseInt(staffId), duty_type: dutyType });
+      });
+    });
+    if (schedRows.length > 0) {
+      await sb.from('schedule').upsert(schedRows, { onConflict: 'date,staff_id' });
+    }
+
+    showSaveFlash('✓ Saved to database');
+  } catch(err) {
+    console.error('Save failed:', err);
+    showSaveFlash('⚠ Save failed');
+  }
+}
+
+function showSaveFlash(msg) {
+  let el = document.getElementById('save-flash');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'save-flash';
+    el.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#1a1a18;color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:500;z-index:9999;opacity:0;transition:opacity .25s;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.25)';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.style.opacity = '1';
+  clearTimeout(el._t);
+  if (msg.startsWith('✓')) el._t = setTimeout(() => { el.style.opacity = '0'; }, 2500);
+}
+
+// ── Add / Update single staff in Supabase (used after save modal) ──
+async function saveStaffToDB(s) {
+  const { data, error } = await sb.from('staff').upsert({
+    id: s.id > 1000000 ? undefined : s.id,  // new records don't send temp id
+    name:s.name, emp_id:s.empId, dept:s.dept,
+    desig:s.desig, status:s.status, role:s.role, notes:s.notes
+  }).select().single();
+  if (data) s.id = data.id;   // replace temp id with real DB id
+  return s;
+}
+
+// ── Delete staff from Supabase ──
+async function deleteStaffFromDB(id) {
+  await sb.from('staff').delete().eq('id', id);
+}
+
+// ── Delete condition from Supabase ──
+async function deleteConditionFromDB(id) {
+  if (id) await sb.from('conditions').delete().eq('id', id);
+}
+
+let staff = DEFAULT_STAFF;
+
+// ===================== DATA =====================
+let staff = loadFromStorage(STORE_KEY_STAFF, DEFAULT_STAFF);
+let editingStaffId = null;
+
+/*
+  DUTY TYPES:
+  - 'straight-morning'   07:00–15:30  (8.5h)
+  - 'straight-afternoon' 11:30–20:00  (8.5h)
+  - 'straight-evening'   15:30–00:00  (8.5h)
+  - 'split'              07:00–12:00 + 19:00–00:00 (5h + 5h = 10h with break)
+  - 'off'                Day off (exactly 1 available staff per day)
+  - 'leave'              On approved leave
+  - 'absent'             Absent/unplanned
+*/
+/*
+  COVERAGE RULES:
+  ┌─────────────────────────────────────────────────────┐
+  │  07:00–08:00   → SOLO zone  (1 person only)         │
+  │  08:00–22:30   → PEAK zone  (multiple staff)        │
+  │  22:30–00:00   → SOLO zone  (1 person only)         │
+  └─────────────────────────────────────────────────────┘
+
+  STRAIGHT SHIFTS (8h 30m each):
+    STR-OPEN   07:00–15:30  covers solo open + peak morning
+    STR-MID    09:00–17:30  peak only
+    STR-AFT    13:00–21:30  peak + early close
+    STR-CLOSE  15:30–00:00  covers peak afternoon + solo close
+
+  SPLIT DUTY:
+    AM block   07:00–12:00  (covers solo open + peak morning)
+    PM block   19:00–00:00  (covers peak evening + solo close)
+
+  SOLO COVERAGE RULE:
+    • STR-OPEN  staff member is ALWAYS the solo opener (07:00–08:00)
+    • STR-CLOSE staff member is ALWAYS the solo closer (22:30–00:00)
+    • Split duty PM block staff covers the close window too
+    • Only 1 person may be scheduled for STR-OPEN per day
+    • Only 1 person may be scheduled for STR-CLOSE per day
+*/
+const STRAIGHT_SHIFTS = [
+  {key:'straight-open',  label:'Straight — Open',    short:'STR-O', time:'07:00–15:30', color:'blue',   solo:'open'},
+  {key:'straight-mid',   label:'Straight — Mid',     short:'STR-M', time:'09:00–17:30', color:'blue',   solo:null},
+  {key:'straight-aft',   label:'Straight — Aft',     short:'STR-A', time:'13:00–21:30', color:'blue',   solo:null},
+  {key:'straight-close', label:'Straight — Close',   short:'STR-C', time:'15:30–00:00', color:'blue',   solo:'close'},
+];
+const SPLIT = {key:'split', label:'Split duty', short:'SPLIT', time:'07:00–12:00 & 19:00–00:00', color:'coral'};
+
+const DAYS  = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const DSHRT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+let config = loadFromStorage(STORE_KEY_CONFIG, {minStaff:2, maxDays:5, rotation:4, splitRatio:3});
+
+let rules = [
+  {id:1,title:'Leave & absent staff excluded',desc:'Employees on leave or absent are not scheduled for any duty.',icon:'ti-calendar-off',enabled:true},
+  {id:2,title:'Exactly one day off per available staff per day',desc:'Each day exactly one available staff member is given a day off, rotating fairly across the week.',icon:'ti-moon',enabled:true},
+  {id:3,title:'One duty assignment per staff per day',desc:'A staff member is assigned either straight duty or split duty — never both in one day.',icon:'ti-clock-hour-4',enabled:true},
+  {id:4,title:'Supervisor present on every shift',desc:'At least one supervisor or team leader must be on duty in every slot.',icon:'ti-shield-check',enabled:true},
+  {id:5,title:'Fair split/straight distribution',desc:'Split duty is rotated among staff so no one repeatedly gets the harder pattern.',icon:'ti-scale',enabled:true},
+  {id:6,title:'Weekly rotation of duty types',desc:'The system offsets assignments each week so staff experience different patterns.',icon:'ti-arrows-exchange',enabled:true},
+  {id:7,title:'Minimum staffing maintained',desc:'At least the configured minimum number of staff are on duty at all times.',icon:'ti-users',enabled:true},
+  {id:8,title:'Max consecutive duty days',desc:'No staff member is scheduled for more than the maximum configured consecutive days.',icon:'ti-calendar-stats',enabled:true},
+];
+
+let customConditions = loadFromStorage(STORE_KEY_CONDITIONS, []);
+let schedule = loadFromStorage(STORE_KEY_SCHEDULE, {});
+
+// Restore rule enabled states from storage
+(function() {
+  const savedRules = loadFromStorage(STORE_KEY_RULES, null);
+  if (savedRules) {
+    savedRules.forEach(sr => {
+      const r = rules.find(x => x.id === sr.id);
+      if (r) r.enabled = sr.enabled;
+    });
+  }
+})();
+let currentWeekStart = getMonday(new Date());
+let activeTab = 'weekly';
+
+// ===================== SCHEDULE GENERATION =====================
+/*
+  COVERAGE ZONES PER DAY:
+    07:00–08:00  SOLO-OPEN  → exactly 1 staff (STR-OPEN or Split-AM person)
+    08:00–22:30  PEAK       → multiple staff (STR-MID, STR-AFT, STR-OPEN tail, STR-CLOSE start, Split both blocks)
+    22:30–00:00  SOLO-CLOSE → exactly 1 staff (STR-CLOSE or Split-PM person)
+
+  ASSIGNMENT PRIORITY:
+    1. Pick 1 staff as day-off (rotating fair)
+    2. Assign 1 SOLO-OPEN staff  → STR-OPEN  (07:00–15:30)
+    3. Assign 1 SOLO-CLOSE staff → STR-CLOSE (15:30–00:00)  [or use Split staff]
+    4. Remaining staff → STR-MID / STR-AFT / Split (peak coverage)
+    5. Solo slots must NOT overlap with >1 person in 07-08 or 22:30-00
+*/
+function generateSchedule() {
+  schedule = {};
+  const weekDates = getWeekDates(currentWeekStart);
+  const weekNum   = getWeekNumber(currentWeekStart);
+  const available = staff.filter(s => s.status === 'Available');
+  if (!available.length) return;
+
+  // Weekly fairness counters
+  const counters = {};
+  available.forEach(s => {
+    counters[s.id] = {
+      straight:0, split:0, off:0,
+      'straight-open':0, 'straight-mid':0, 'straight-aft':0, 'straight-close':0
+    };
+  });
+
+  weekDates.forEach((date, dayIdx) => {
+    const ds = formatDate(date);
+    schedule[ds] = {};
+
+    // Step 1: mark leave / absent
+    staff.forEach(s => {
+      if (s.status === 'Leave')        schedule[ds][s.id] = 'leave';
+      else if (s.status === 'Absent')  schedule[ds][s.id] = 'absent';
+    });
+
+    if (!available.length) return;
+
+    // Step 2: exactly ONE day-off (rotate fairly)
+    const offPool = [...available].sort((a, b) => {
+      if (counters[a.id].off !== counters[b.id].off) return counters[a.id].off - counters[b.id].off;
+      const ai = available.indexOf(a), bi = available.indexOf(b);
+      return ((ai + dayIdx + weekNum * 7) % available.length) - ((bi + dayIdx + weekNum * 7) % available.length);
+    });
+    const offStaff = offPool[0];
+    schedule[ds][offStaff.id] = 'off';
+    counters[offStaff.id].off++;
+
+    // Duty pool = available minus day-off person
+    let pool = available.filter(s => !schedule[ds][s.id]);
+    if (!pool.length) return;
+
+    // Helper: pick from pool by lowest count of a key, with rotation tie-break
+    function pickOne(pool, countKey, seed) {
+      return [...pool].sort((a, b) => {
+        const diff = (counters[a.id][countKey]||0) - (counters[b.id][countKey]||0);
+        if (diff !== 0) return diff;
+        return ((available.indexOf(a) + seed) % available.length) -
+               ((available.indexOf(b) + seed) % available.length);
+      })[0];
+    }
+
+    // Step 3: assign SOLO-OPEN person → STR-OPEN (07:00–15:30)
+    // Prefer non-supervisor for solo open so supervisor covers peak; rotate fairly
+    const nonSup = pool.filter(s => s.role !== 'Supervisor' && s.role !== 'Team Leader');
+    const openCandidates = nonSup.length > 0 ? nonSup : pool;
+    const openPerson = pickOne(openCandidates, 'straight-open', dayIdx + weekNum);
+    schedule[ds][openPerson.id] = 'straight-open';
+    counters[openPerson.id]['straight-open']++;
+    counters[openPerson.id].straight++;
+    pool = pool.filter(s => s.id !== openPerson.id);
+
+    if (!pool.length) return;
+
+    // Step 4: decide how many get SPLIT duty from remaining pool
+    const nSplit = Math.max(0, Math.round(pool.length * config.splitRatio / 10));
+
+    // Prefer non-sup for split; sort by fewest splits
+    const splitCandidates = [...pool].sort((a, b) => {
+      const diff = counters[a.id].split - counters[b.id].split;
+      if (diff !== 0) return diff;
+      const aPri = (a.role === 'Supervisor' || a.role === 'Team Leader') ? 1 : 0;
+      const bPri = (b.role === 'Supervisor' || b.role === 'Team Leader') ? 1 : 0;
+      return aPri - bPri;
+    });
+    const splitSet = new Set(splitCandidates.slice(0, nSplit).map(s => s.id));
+
+    // Assign split duty
+    pool.forEach(s => {
+      if (splitSet.has(s.id)) {
+        schedule[ds][s.id] = 'split';
+        counters[s.id].split++;
+      }
+    });
+
+    // Step 5: remaining straight pool
+    let straightPool = pool.filter(s => !splitSet.has(s.id));
+    if (!straightPool.length) return;
+
+    // Step 6: assign SOLO-CLOSE person → STR-CLOSE (15:30–00:00)
+    // Only 1 person covers 22:30–00:00. Pick from straight pool with fewest close shifts.
+    // If split staff exists, split-PM already covers close — so close is covered; still assign STR-CLOSE for 15:30 handover.
+    const closePerson = pickOne(straightPool, 'straight-close', dayIdx * 3 + weekNum);
+    schedule[ds][closePerson.id] = 'straight-close';
+    counters[closePerson.id]['straight-close']++;
+    counters[closePerson.id].straight++;
+    straightPool = straightPool.filter(s => s.id !== closePerson.id);
+
+    // Step 7: fill remaining straight pool with STR-MID / STR-AFT (peak only)
+    // Rotate between mid and aft fairly; supervisors prefer mid for peak visibility
+    const peakShifts = ['straight-mid', 'straight-aft'];
+    const supervisorsLeft = straightPool.filter(s => s.role === 'Supervisor' || s.role === 'Team Leader');
+    const othersLeft      = straightPool.filter(s => s.role !== 'Supervisor' && s.role !== 'Team Leader');
+
+    // Supervisors → STR-MID (peak oversight)
+    supervisorsLeft.forEach((s, i) => {
+      const shift = peakShifts[i % 2]; // alternate if multiple supervisors
+      schedule[ds][s.id] = shift;
+      counters[s.id][shift]++;
+      counters[s.id].straight++;
+    });
+
+    // Others → alternate STR-MID / STR-AFT by rotation
+    othersLeft.forEach((s, i) => {
+      const shiftIdx = ((i + dayIdx + weekNum) % 2);
+      const shift = peakShifts[shiftIdx];
+      schedule[ds][s.id] = shift;
+      counters[s.id][shift]++;
+      counters[s.id].straight++;
+    });
+  });
+}
+
+// ===================== DUTY DISPLAY HELPERS =====================
+function dutyLabel(val) {
+  if (!val) return '—';
+  if (val === 'off')    return `<span class="duty-off"><span class="svg-icon" aria-hidden="true" style="font-size:13px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span></i> Off</span>`;
+  if (val === 'leave')  return `<span class="duty-leave">Leave</span>`;
+  if (val === 'absent') return `<span class="duty-absent">Absent</span>`;
+  if (val === 'split')  return `<span class="duty-split"><span class="svg-icon" aria-hidden="true" style="font-size:11px"><svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 17H3"/><path d="M21 7H3"/><path d="M12 2v20"/></svg></span></i> Split</span>`;
+  const sh = STRAIGHT_SHIFTS.find(x => x.key === val);
+  if (sh) {
+    const isSolo = sh.solo ? `<span style="font-size:10px;margin-left:4px;opacity:.7">(solo ${sh.solo})</span>` : '';
+    return `<span class="duty-straight">${sh.short}</span>${isSolo}`;
+  }
+  return val;
+}
+
+function dutyShortCell(val) {
+  if (!val) return `<td>—</td>`;
+  if (val === 'off')    return `<td><span class="duty-off" style="font-size:11px">Off</span></td>`;
+  if (val === 'leave')  return `<td><span class="duty-leave">L</span></td>`;
+  if (val === 'absent') return `<td><span class="duty-absent">A</span></td>`;
+  if (val === 'split')  return `<td><span class="split-pill"><span class="split-am">AM</span><span class="split-pm">PM</span></span></td>`;
+  if (val === 'straight-open')  return `<td><span class="duty-straight" style="background:#FFF3CD;color:#7A5C00" title="07:00–15:30 · Solo open 07-08">STR-O</span></td>`;
+  if (val === 'straight-mid')   return `<td><span class="duty-straight" title="09:00–17:30">STR-M</span></td>`;
+  if (val === 'straight-aft')   return `<td><span class="duty-straight" style="background:var(--teal-light);color:var(--teal)" title="13:00–21:30">STR-A</span></td>`;
+  if (val === 'straight-close') return `<td><span class="duty-straight" style="background:var(--purple-light);color:var(--purple)" title="15:30–00:00 · Solo close 22:30-00">STR-C</span></td>`;
+  return `<td>${val}</td>`;
+}
+
+function dutyHours(val) {
+  if (['off','leave','absent',undefined,null,''].includes(val)) return '—';
+  if (val === 'split') return '10h (split)';
+  return '8h 30m';
+}
+
+function dutyTime(val) {
+  if (val === 'split') return '07:00–12:00 & 19:00–00:00';
+  const sh = STRAIGHT_SHIFTS.find(x => x.key === val);
+  return sh ? sh.time : '';
+}
+
+// ===================== ALERTS =====================
+function getScheduleAlerts() {
+  const alerts = [];
+  const avail = staff.filter(s => s.status === 'Available');
+  if (!avail.length) { alerts.push({type:'danger', msg:'No available staff — schedule cannot be generated.'}); return alerts; }
+  if (avail.length < 3) alerts.push({type:'danger', msg:`Only ${avail.length} staff available. Minimum 3 needed for meaningful coverage with one day off.`});
+  else if (avail.length < config.minStaff + 1) alerts.push({type:'warning', msg:`${avail.length} staff available. After one day off, ${avail.length-1} on duty — below the configured minimum of ${config.minStaff}.`});
+  const onLeave = staff.filter(s => s.status === 'Leave').length;
+  const absent  = staff.filter(s => s.status === 'Absent').length;
+  if (onLeave > 0) alerts.push({type:'info', msg:`${onLeave} staff on leave — excluded from scheduling.`});
+  if (absent  > 0) alerts.push({type:'warning', msg:`${absent} staff absent.`});
+  const noSup = !avail.some(s => s.role === 'Supervisor' || s.role === 'Team Leader');
+  if (noSup) alerts.push({type:'danger', msg:'No supervisor or team leader available. Duty slots may lack leadership coverage.'});
+  // Check solo zone coverage using today's schedule
+  const todayStr2 = formatDate(new Date());
+  const todaySch2 = schedule[todayStr2] || {};
+  const openCount  = Object.values(todaySch2).filter(v => v === 'straight-open').length;
+  const closeCount = Object.values(todaySch2).filter(v => v === 'straight-close' || v === 'split').length;
+  if (openCount > 1)  alerts.push({type:'warning', msg:`Solo open zone (07:00–08:00) has ${openCount} staff assigned — should be exactly 1.`});
+  if (openCount === 0) alerts.push({type:'danger',  msg:'Solo open zone (07:00–08:00) has no staff assigned.'});
+  if (closeCount === 0) alerts.push({type:'danger', msg:'Solo close zone (22:30–00:00) has no staff assigned.'});
+  return alerts;
+}
+
+// ===================== RENDER: DASHBOARD =====================
+function renderDashboard() {
+  const avail   = staff.filter(s => s.status === 'Available');
+  const onLeave = staff.filter(s => s.status === 'Leave');
+  const absent  = staff.filter(s => s.status === 'Absent');
+  const todayStr = formatDate(new Date());
+  const todaySch = schedule[todayStr] || {};
+  const onDuty   = Object.values(todaySch).filter(v => v && v !== 'off' && v !== 'leave' && v !== 'absent').length;
+
+  document.getElementById('sb-available').innerHTML = `${avail.length} <span>staff</span>`;
+  document.getElementById('sb-onduty').innerHTML    = `${onDuty} <span>assigned</span>`;
+
+  document.getElementById('dash-stats').innerHTML = `
+    <div class="stat-card blue"><div class="stat-label">Total staff</div><div class="stat-val">${staff.length}</div><div class="stat-sub">registered</div></div>
+    <div class="stat-card green"><div class="stat-label">Available</div><div class="stat-val">${avail.length}</div><div class="stat-sub">ready to schedule</div></div>
+    <div class="stat-card amber"><div class="stat-label">On leave</div><div class="stat-val">${onLeave.length}</div><div class="stat-sub">excluded</div></div>
+    <div class="stat-card red"><div class="stat-label">Absent</div><div class="stat-val">${absent.length}</div><div class="stat-sub">unscheduled</div></div>
+  `;
+
+  const alerts = getScheduleAlerts();
+  document.getElementById('dash-alerts').innerHTML = alerts.map(a => `
+    <div class="alert alert-${a.type}"><span class="svg-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span></i><span>${a.msg}</span></div>
+  `).join('');
+
+  // Coverage breakdown
+  const straight  = Object.values(todaySch).filter(v => v && v.startsWith('straight-')).length;
+  const split     = Object.values(todaySch).filter(v => v === 'split').length;
+  const off       = Object.values(todaySch).filter(v => v === 'off').length;
+  const soloOpen  = Object.values(todaySch).filter(v => v === 'straight-open').length;
+  const soloClose = Object.values(todaySch).filter(v => v === 'straight-close' || v === 'split').length;
+  const total     = avail.length || 1;
+  // Build hour-by-hour staff count for each hour slot 07–24
+  // Shift coverage: which hours each duty type covers
+  const SHIFT_HOURS = {
+    'straight-open':  [7,8,9,10,11,12,13,14,15],          // 07:00–15:30
+    'straight-mid':   [9,10,11,12,13,14,15,16,17],         // 09:00–17:30
+    'straight-aft':   [13,14,15,16,17,18,19,20,21],        // 13:00–21:30
+    'straight-close': [15,16,17,18,19,20,21,22,23],        // 15:30–00:00
+    'split':          [7,8,9,10,11,19,20,21,22,23],        // 07–12 & 19–00
+  };
+  const HOURS = [7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23];
+  const HOUR_LABELS = ['7am','8','9','10','11','12','1pm','2','3','4','5','6','7pm','8','9','10','11'];
+  const hourCounts = {};
+  HOURS.forEach(h => { hourCounts[h] = 0; });
+  staff.forEach(s => {
+    const v = todaySch[s.id];
+    if (!v || v==='off'||v==='leave'||v==='absent') return;
+    (SHIFT_HOURS[v]||[]).forEach(h => { if(hourCounts[h]!==undefined) hourCounts[h]++; });
+  });
+  const maxCount = Math.max(...Object.values(hourCounts), 1);
+  const SOLO_HOURS = [7, 23]; // hours where only 1 person required
+
+  const barHTML = HOURS.map((h, i) => {
+    const count = hourCounts[h];
+    const isSolo = SOLO_HOURS.includes(h);
+    const isOk   = isSolo ? count === 1 : count >= config.minStaff;
+    const barColor = !count ? 'var(--danger)' : isOk ? 'var(--success)' : count < config.minStaff ? '#EF9F27' : 'var(--success)';
+    const bgColor  = isSolo ? 'rgba(255,243,205,0.5)' : 'transparent';
+    const pct = (count / maxCount * 100).toFixed(0);
+    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;background:'+bgColor+';padding:2px 1px;border-radius:3px" title="'+h+':00 – '+count+' staff+(isSolo?' (solo zone, 1 required)':'')+" >
+      <div style="font-size:9px;font-weight:700;color:'+barColor+'">'+count+'</div>
+      <div style="width:100%;height:40px;background:var(--gray-100);border-radius:3px;overflow:hidden;display:flex;align-items:flex-end">
+        <div style="width:100%;height:'+pct+'%;background:'+barColor+';border-radius:3px;transition:height .3s;min-height:+(count?2:0)+px"></div>
+      </div>
+      <div style="font-size:9px;color:var(--text-muted);white-space:nowrap">'+HOUR_LABELS[i]+'</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('dash-coverage').innerHTML =
+    `<div style="display:flex;gap:1px;align-items:flex-end;margin-bottom:4px">${barHTML}</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;font-size:11px;margin-top:6px">
+      <span style="display:flex;align-items:center;gap:3px"><span style="width:8px;height:8px;border-radius:2px;background:#FFF3CD;border:1px solid #E6C619;display:inline-block"></span>Solo zone (1 person)</span>
+      <span style="display:flex;align-items:center;gap:3px"><span style="width:8px;height:8px;border-radius:2px;background:var(--success);display:inline-block"></span>OK</span>
+      <span style="display:flex;align-items:center;gap:3px"><span style="width:8px;height:8px;border-radius:2px;background:#EF9F27;display:inline-block"></span>Under minimum</span>
+      <span style="display:flex;align-items:center;gap:3px"><span style="width:8px;height:8px;border-radius:2px;background:var(--danger);display:inline-block"></span>Uncovered</span>
+    </div>
+    <div style="margin-top:10px;padding-top:8px;border-top:0.5px solid var(--border);display:flex;gap:8px;flex-wrap:wrap">
+      <div style="background:${soloOpen===1?'var(--success-light)':'var(--danger-light)'};color:${soloOpen===1?'var(--success)':'var(--danger)'};border-radius:5px;padding:3px 10px;font-size:11px;font-weight:500">
+        07:00–08:00 solo: ${soloOpen===1?'✓ Covered':'⚠ '+soloOpen+' assigned'}
+      </div>
+      <div style="background:${soloClose>=1?'var(--success-light)':'var(--danger-light)'};color:${soloClose>=1?'var(--success)':'var(--danger)'};border-radius:5px;padding:3px 10px;font-size:11px;font-weight:500">
+        22:30–00:00 solo: ${soloClose>=1?'✓ Covered':'⚠ Not covered'}
+      </div>
+    </div>`;
+
+  // Avail breakdown
+  document.getElementById('dash-avail-chart').innerHTML = [
+    {label:'Available',count:avail.length,  color:'var(--success)'},
+    {label:'On leave', count:onLeave.length, color:'#EF9F27'},
+    {label:'Absent',   count:absent.length,  color:'var(--danger)'},
+  ].map(item => `
+    <div class="coverage-bar">
+      <div class="coverage-label">${item.label}</div>
+      <div class="coverage-track"><div class="coverage-fill" style="width:${(item.count/total*100).toFixed(0)}%;background:${item.color}"></div></div>
+      <div class="coverage-count">${item.count}</div>
+    </div>
+  `).join('') + `<div style="font-size:11px;color:var(--text-muted);margin-top:8px">Total: ${staff.length} employees</div>`;
+
+  // Today's table
+  document.getElementById('dash-today-table').innerHTML = staff.map(s => {
+    const val  = todaySch[s.id];
+    const roleBadge = s.role ? `<span class="badge ${s.role==='Supervisor'?'badge-supervisor':s.role==='Team Leader'?'badge-teamlead':'badge-special'}">${s.role}</span>` : '';
+    return `<tr>
+      <td><strong>${s.name}</strong></td>
+      <td>${s.desig}</td>
+      <td>${dutyLabel(val)}${val&&val!=='off'&&val!=='leave'&&val!=='absent'?`<span style="font-size:10px;color:var(--text-muted);margin-left:6px">${dutyTime(val)}</span>`:''}</td>
+      <td style="font-size:12px;color:var(--text-muted)">${dutyHours(val)}</td>
+      <td>${roleBadge||`<span style="font-size:12px;color:var(--text-muted)">${s.status}</span>`}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted)">Generate a schedule to see today's assignments.</td></tr>`;
+}
+
+// ===================== RENDER: STAFF TABLE =====================
+function renderStaffTable() {
+  const q = document.getElementById('staff-search').value.toLowerCase();
+  const sf = document.getElementById('staff-filter-status').value;
+  const filtered = staff.filter(s =>
+    (!q || s.name.toLowerCase().includes(q) || s.empId.toLowerCase().includes(q)) &&
+    (!sf || s.status === sf)
+  );
+  const tbody = document.getElementById('staff-table-body');
+  if (!filtered.length) { tbody.innerHTML=''; document.getElementById('staff-empty').classList.remove('hidden'); return; }
+  document.getElementById('staff-empty').classList.add('hidden');
+  tbody.innerHTML = filtered.map(s => {
+    const sb = s.status==='Available'?'badge-available':s.status==='Leave'?'badge-leave':'badge-absent';
+    const rb = s.role ? `<span class="badge ${s.role==='Supervisor'?'badge-supervisor':s.role==='Team Leader'?'badge-teamlead':'badge-special'}">${s.role}</span>` : '<span style="color:var(--text-muted);font-size:12px">—</span>';
+    return `<tr>
+      <td><strong>${s.name}</strong></td>
+      <td style="color:var(--text-muted);font-size:12px">${s.empId}</td>
+      <td>${s.dept}</td><td>${s.desig}</td>
+      <td><span class="badge ${sb}">${s.status}</span></td>
+      <td>${rb}</td>
+      <td style="font-size:12px;color:var(--text-muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.notes||'—'}</td>
+      <td><div style="display:flex;gap:4px">
+        <button class="btn btn-sm" onclick="editStaff(${s.id})"><span class="svg-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span></i></button>
+        <button class="btn btn-sm btn-danger" onclick="deleteStaff(${s.id})"><span class="svg-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span></i></button>
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+
+// ===================== RENDER: WEEKLY TABLE =====================
+function renderWeeklyTable() {
+  const dates = getWeekDates(currentWeekStart);
+  let html = '<thead><tr><th>Employee</th>';
+  dates.forEach(d => {
+    const isToday = formatDate(d) === formatDate(new Date());
+    html += `<th style="${isToday?'background:var(--primary-light);color:var(--primary)':''}">${DSHRT[d.getDay()]}<br><span style="font-weight:400;font-size:10px">${d.getDate()}/${d.getMonth()+1}</span></th>`;
+  });
+  html += '</tr></thead><tbody>';
+  staff.forEach(s => {
+    html += `<tr><td class="staff-name">${s.name}<br><span style="font-size:10px;color:var(--text-muted)">${s.desig}</span></td>`;
+    dates.forEach(d => { html += dutyShortCell((schedule[formatDate(d)]||{})[s.id]); });
+    html += '</tr>';
+  });
+  html += '</tbody>';
+  document.getElementById('weekly-table').innerHTML = html;
+}
+
+// ===================== RENDER: DAY SELECT =====================
+function renderDaySelect() {
+  const dates = getWeekDates(currentWeekStart);
+  document.getElementById('day-select').innerHTML = dates.map(d => {
+    const ds = formatDate(d);
+    return `<option value="${ds}">${DAYS[d.getDay()]} ${d.getDate()}/${d.getMonth()+1}${ds===formatDate(new Date())?' (today)':''}</option>`;
+  }).join('');
+}
+
+// ===================== RENDER: DAILY DETAIL =====================
+function renderDailyDetail() {
+  const ds = document.getElementById('day-select')?.value;
+  if (!ds) return;
+  const daySch = schedule[ds] || {};
+  const d = new Date(ds + 'T00:00:00');
+
+  // Group staff by duty type
+  const groups = {
+    'straight-open':  {label:'Straight — Open',  time:'07:00–15:30  ·  Solo zone: 07:00–08:00', color:'#7A5C00',        bg:'#FFF9E6'},
+    'straight-mid':   {label:'Straight — Mid',   time:'09:00–17:30  ·  Peak hours',             color:'var(--primary)', bg:'var(--primary-light)'},
+    'straight-aft':   {label:'Straight — Aft',   time:'13:00–21:30  ·  Peak hours',             color:'var(--teal)',    bg:'var(--teal-light)'},
+    'straight-close': {label:'Straight — Close', time:'15:30–00:00  ·  Solo zone: 22:30–00:00', color:'var(--purple)',  bg:'var(--purple-light)'},
+    'split':          {label:'Split duty',        time:'07:00–12:00 & 19:00–00:00',              color:'var(--coral)',   bg:'var(--coral-light)'},
+    'off':            {label:'Day off',           time:'—',                                       color:'var(--gray-600)',bg:'var(--gray-50)'},
+    'leave':          {label:'On leave',          time:'—',                                       color:'var(--warning)', bg:'var(--warning-light)'},
+    'absent':         {label:'Absent',            time:'—',                                       color:'var(--danger)',  bg:'var(--danger-light)'},
+  };
+
+  let html = `<div class="card">
+    <div class="card-header">
+      <span class="card-title">${DAYS[d.getDay()]}, ${d.getDate()} ${d.toLocaleString('default',{month:'long'})} ${d.getFullYear()}</span>
+    </div>`;
+
+  // Summary row
+  const onDuty    = staff.filter(s => daySch[s.id] && daySch[s.id] !== 'off' && daySch[s.id] !== 'leave' && daySch[s.id] !== 'absent');
+  const offStf    = staff.filter(s => daySch[s.id] === 'off');
+  const soloOpenP = staff.filter(s => daySch[s.id] === 'straight-open');
+  const soloClsP  = staff.filter(s => daySch[s.id] === 'straight-close' || daySch[s.id] === 'split');
+  const soloOpenOk  = soloOpenP.length === 1;
+  const soloCloseOk = soloClsP.length >= 1;
+  html += `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+    <div style="background:var(--success-light);border-radius:var(--radius-sm);padding:8px 14px;font-size:13px;color:var(--success)"><strong>${onDuty.length}</strong> on duty</div>
+    <div style="background:var(--gray-50);border-radius:var(--radius-sm);padding:8px 14px;font-size:13px;color:var(--text-muted)"><strong>${offStf.length}</strong> day off</div>
+    <div style="background:var(--primary-light);border-radius:var(--radius-sm);padding:8px 14px;font-size:13px;color:var(--primary)"><strong>${staff.filter(s=>daySch[s.id]&&daySch[s.id].startsWith('straight')).length}</strong> straight</div>
+    <div style="background:var(--coral-light);border-radius:var(--radius-sm);padding:8px 14px;font-size:13px;color:var(--coral)"><strong>${staff.filter(s=>daySch[s.id]==='split').length}</strong> split</div>
+  </div>
+  <div style="background:var(--gray-50);border:0.5px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:14px;font-size:12px">
+    <span style="font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;font-size:10px">Solo coverage zones</span>
+    <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap">
+      <span style="padding:3px 10px;border-radius:4px;font-weight:500;background:${soloOpenOk?'var(--success-light)':'var(--danger-light)'};color:${soloOpenOk?'var(--success)':'var(--danger)'}">
+        07:00–08:00 → ${soloOpenOk?'✓ '+soloOpenP[0].name:'⚠ Not covered'}
+      </span>
+      <span style="padding:3px 10px;border-radius:4px;font-weight:500;background:${soloCloseOk?'var(--success-light)':'var(--danger-light)'};color:${soloCloseOk?'var(--success)':'var(--danger)'}">
+        22:30–00:00 → ${soloCloseOk?'✓ '+(soloClsP[0]?.name||''):'⚠ Not covered'}
+      </span>
+    </div>
+  </div>`;
+
+  const groupOrder = ['straight-open','straight-mid','straight-aft','straight-close','split','off','leave','absent'];
+  groupOrder.forEach(key => {
+    const members = staff.filter(s => daySch[s.id] === key);
+    if (!members.length) return;
+    const g = groups[key];
+    html += `<div class="duty-block">
+      <div class="duty-block-header">
+        <div style="width:10px;height:10px;border-radius:50%;background:${g.color};flex-shrink:0"></div>
+        <span style="color:${g.color};font-weight:600">${g.label}</span>
+        ${g.time !== '—' ? `<span style="font-size:11px;color:var(--text-muted);font-weight:400">${g.time}</span>` : ''}
+        <span style="margin-left:auto;font-size:11px;background:${g.bg};color:${g.color};padding:2px 8px;border-radius:10px;font-weight:600">${members.length} staff</span>
+      </div>
+      <div class="staff-chips">`;
+    members.forEach(s => {
+      const rb = s.role ? `<span class="badge ${s.role==='Supervisor'?'badge-supervisor':s.role==='Team Leader'?'badge-teamlead':'badge-special'}" style="margin-top:4px">${s.role}</span>` : '';
+      html += `<div class="staff-chip"><strong>${s.name}</strong><span>${s.desig}</span>${rb}</div>`;
+    });
+    html += `</div></div>`;
+  });
+
+  html += '</div>';
+  document.getElementById('daily-detail-content').innerHTML = html;
+}
+
+// ===================== RENDER: RULES =====================
+function renderRules() {
+  document.getElementById('rules-list').innerHTML = rules.map(r => `
+    <div class="rule-item">
+      <div class="rule-icon" style="background:var(--primary-light);color:var(--primary)"><i class="ti ${r.icon}"></i></div>
+      <div class="rule-content"><div class="rule-title">${r.title}</div><div class="rule-desc">${r.desc}</div></div>
+      <label class="toggle"><input type="checkbox" ${r.enabled?'checked':''} onchange="toggleRule(${r.id})"><span class="toggle-slider"></span></label>
+    </div>
+  `).join('');
+
+  const cl = document.getElementById('custom-conditions-list');
+  if (!customConditions.length) {
+    cl.innerHTML = `<div style="padding:16px 0;text-align:center;color:var(--text-muted);font-size:13px"><span class="svg-icon" aria-hidden="true" style="font-size:20px;display:block;margin-bottom:6px;opacity:.4"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span></i>No custom conditions yet.</div>`;
+  } else {
+    cl.innerHTML = customConditions.map((c,i) => `
+      <div class="rule-item">
+        <div class="rule-icon" style="background:var(--teal-light);color:var(--teal)"><span class="svg-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></span></i></div>
+        <div class="rule-content">
+          <div class="rule-title">${c.name} <span class="badge" style="background:var(--gray-100);color:var(--gray-600);font-size:10px">${c.priority}</span></div>
+          <div class="rule-desc">${c.desc||''} — Applies to: ${c.applies}</div>
+        </div>
+        <button class="btn btn-sm btn-danger" onclick="deleteCondition(${i})"><span class="svg-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span></i></button>
+      </div>
+    `).join('');
+  }
+}
+
+// ===================== RENDER: REPORTS =====================
+function renderReports() {
+  const weekDates = getWeekDates(currentWeekStart);
+  const counts = {};
+  staff.forEach(s => { counts[s.id] = {straight:0, split:0, off:0, leave:0, absent:0}; });
+
+  weekDates.forEach(d => {
+    const ds = formatDate(d);
+    const ds2 = schedule[ds] || {};
+    staff.forEach(s => {
+      const v = ds2[s.id];
+      if (!v) return;
+      if (v.startsWith('straight')) counts[s.id].straight++;
+      else if (v === 'split')   counts[s.id].split++;
+      else if (v === 'off')     counts[s.id].off++;
+      else if (v === 'leave')   counts[s.id].leave++;
+      else if (v === 'absent')  counts[s.id].absent++;
+    });
+  });
+
+  const totalStr   = Object.values(counts).reduce((a,c) => a+c.straight, 0);
+  const totalSplit = Object.values(counts).reduce((a,c) => a+c.split,    0);
+  const totalDuty  = totalStr + totalSplit;
+  const totalOff   = Object.values(counts).reduce((a,c) => a+c.off,      0);
+
+  document.getElementById('report-stats').innerHTML = `
+    <div class="stat-card blue"><div class="stat-label">Total duty days</div><div class="stat-val">${totalDuty}</div><div class="stat-sub">this week</div></div>
+    <div class="stat-card"><div class="stat-label">Straight duty</div><div class="stat-val" style="color:var(--primary)">${totalStr}</div></div>
+    <div class="stat-card"><div class="stat-label">Split duty</div><div class="stat-val" style="color:var(--coral)">${totalSplit}</div></div>
+    <div class="stat-card amber"><div class="stat-label">Days off given</div><div class="stat-val">${totalOff}</div></div>
+  `;
+
+  // Workload chart
+  const max = Math.max(...staff.map(s => counts[s.id].straight + counts[s.id].split), 1);
+  document.getElementById('workload-chart').innerHTML = staff.map(s => {
+    const total = counts[s.id].straight + counts[s.id].split;
+    const pctS  = (counts[s.id].straight / max * 100).toFixed(0);
+    const pctSp = (counts[s.id].split    / max * 100).toFixed(0);
+    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <div style="font-size:12px;min-width:110px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.name.split(' ')[0]}</div>
+      <div style="flex:1;height:10px;background:var(--gray-100);border-radius:5px;overflow:hidden;display:flex">
+        <div style="width:${pctS}%;background:var(--primary)"></div>
+        <div style="width:${pctSp}%;background:var(--coral)"></div>
+      </div>
+      <div style="font-size:12px;font-weight:500;min-width:16px;text-align:right">${total}</div>
+    </div>`;
+  }).join('') + `<div style="display:flex;gap:10px;margin-top:6px;font-size:11px"><span style="color:var(--primary)">■ Straight</span><span style="color:var(--coral)">■ Split</span></div>`;
+
+  // Duty type breakdown
+  const d = [
+    {label:'Straight duty', val:totalStr,   color:'var(--primary)'},
+    {label:'Split duty',    val:totalSplit,  color:'var(--coral)'},
+    {label:'Day off',       val:totalOff,    color:'var(--gray-400)'},
+  ];
+  const maxT = Math.max(...d.map(x => x.val), 1);
+  document.getElementById('duty-type-chart').innerHTML = d.map(item => `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <div style="font-size:13px;min-width:90px;font-weight:500;color:${item.color}">${item.label}</div>
+      <div style="flex:1;height:12px;background:var(--gray-100);border-radius:6px;overflow:hidden"><div style="height:100%;width:${(item.val/maxT*100).toFixed(0)}%;background:${item.color};border-radius:6px"></div></div>
+      <div style="font-size:13px;font-weight:600;color:${item.color};min-width:24px;text-align:right">${item.val}</div>
+    </div>
+  `).join('');
+
+  // Duty log table
+  document.getElementById('report-table').innerHTML = staff.map(s => {
+    const c = counts[s.id];
+    const rb = s.role ? `<span class="badge ${s.role==='Supervisor'?'badge-supervisor':s.role==='Team Leader'?'badge-teamlead':'badge-special'}">${s.role}</span>` : '';
+    return `<tr>
+      <td><strong>${s.name}</strong><br><span style="font-size:11px;color:var(--text-muted)">${s.empId}</span></td>
+      <td>${rb||`<span style="font-size:12px;color:var(--text-muted)">—</span>`}</td>
+      <td style="text-align:center;color:var(--primary);font-weight:500">${c.straight}</td>
+      <td style="text-align:center;color:var(--coral);font-weight:500">${c.split}</td>
+      <td style="text-align:center;font-weight:600">${c.straight+c.split}</td>
+      <td style="text-align:center;color:var(--text-muted)">${c.off}</td>
+      <td style="text-align:center;color:var(--warning)">${c.leave+c.absent}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ===================== STAFF CRUD =====================
+function openAddStaff() {
+  editingStaffId = null;
+  document.getElementById('staff-modal-title').textContent = 'Add staff member';
+  ['sf-name','sf-id','sf-dept','sf-notes'].forEach(id => document.getElementById(id).value='');
+  document.getElementById('sf-desig').value  = 'Receptionist';
+  document.getElementById('sf-status').value = 'Available';
+  document.getElementById('sf-role').value   = '';
+  document.getElementById('staff-modal').classList.remove('hidden');
+}
+function editStaff(id) {
+  const s = staff.find(x => x.id === id); if (!s) return;
+  editingStaffId = id;
+  document.getElementById('staff-modal-title').textContent = 'Edit staff member';
+  document.getElementById('sf-name').value   = s.name;
+  document.getElementById('sf-id').value     = s.empId;
+  document.getElementById('sf-dept').value   = s.dept;
+  document.getElementById('sf-desig').value  = s.desig;
+  document.getElementById('sf-status').value = s.status;
+  document.getElementById('sf-role').value   = s.role||'';
+  document.getElementById('sf-notes').value  = s.notes||'';
+  document.getElementById('staff-modal').classList.remove('hidden');
+}
+async function saveStaff() {
+  const name  = document.getElementById('sf-name').value.trim();
+  const empId = document.getElementById('sf-id').value.trim();
+  if (!name || !empId) { alert('Name and ID are required.'); return; }
+
+  const data = {
+    name, empId,
+    dept:   document.getElementById('sf-dept').value.trim() || 'Reception',
+    desig:  document.getElementById('sf-desig').value,
+    status: document.getElementById('sf-status').value,
+    role:   document.getElementById('sf-role').value,
+    notes:  document.getElementById('sf-notes').value.trim(),
+  };
+
+  showSaveFlash('Saving…');
+  if (editingStaffId) {
+    const idx = staff.findIndex(s => s.id === editingStaffId);
+    staff[idx] = { ...staff[idx], ...data };
+    await sb.from('staff').update({
+      name:data.name, emp_id:data.empId, dept:data.dept, desig:data.desig,
+      status:data.status, role:data.role, notes:data.notes
+    }).eq('id', editingStaffId);
+  } else {
+    const { data: row } = await sb.from('staff').insert({
+      name:data.name, emp_id:data.empId, dept:data.dept, desig:data.desig,
+      status:data.status, role:data.role, notes:data.notes
+    }).select().single();
+    data.id = row.id;
+    staff.push(data);
+  }
+  showSaveFlash('✓ Saved');
+  closeModal('staff-modal');
+  refreshAll();
+}
+function deleteStaff(id) {
+  const s = staff.find(x => x.id === id);
+  if (!s) return;
+  document.getElementById('confirm-msg').textContent = `Remove "${s.name}"?`;
+  document.getElementById('confirm-modal').classList.remove('hidden');
+  document.getElementById('confirm-ok').onclick = async function() {
+    await sb.from('staff').delete().eq('id', id);
+    staff = staff.filter(x => x.id !== id);
+    closeModal('confirm-modal');
+    refreshAll();
+    showSaveFlash('✓ Staff removed');
+  };
+}
+
+// ===================== RULES =====================
+function toggleRule(id) { const r=rules.find(x=>x.id===id); if(r){ r.enabled=!r.enabled; persistAll(); } }
+function openAddCondition() {
+  document.getElementById('cond-name').value='';
+  document.getElementById('cond-desc').value='';
+  document.getElementById('condition-modal').classList.remove('hidden');
+}
+function saveCondition() {
+  const name=document.getElementById('cond-name').value.trim();
+  if(!name){alert('Name required.');return;}
+  customConditions.push({name,desc:document.getElementById('cond-desc').value.trim(),applies:document.getElementById('cond-applies').value,priority:document.getElementById('cond-priority').value});
+  persistAll();
+  closeModal('condition-modal');
+  renderRules();
+}
+function deleteCondition(i){ customConditions.splice(i,1); persistAll(); renderRules(); }
+function applyRules(){
+  config.minStaff    = parseInt(document.getElementById('cfg-min-staff').value)||2;
+  config.maxDays     = parseInt(document.getElementById('cfg-max-days').value)||5;
+  config.rotation    = parseInt(document.getElementById('cfg-rotation').value)||4;
+  config.splitRatio  = parseInt(document.getElementById('cfg-split-ratio').value)||3;
+  generateSchedule();
+  persistAll();
+  renderDashboard();
+  renderReports();
+  alert('Settings applied and schedule regenerated.');
+}
+
+// ===================== NAV =====================
+function showPage(page) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('page-'+page).classList.add('active');
+  document.getElementById('nav-'+page).classList.add('active');
+  const titles={
+    dashboard:['Dashboard','Reception duty scheduling overview'],
+    staff:['Staff management','Add, edit and manage reception team members'],
+    schedule:['Weekly schedule','Auto-generated duty assignments (straight & split)'],
+    rules:['Scheduling rules','Configure duty types, constraints and conditions'],
+    reports:['Reports','Workload analysis and duty type distribution'],
+  };
+  const [t,s]=titles[page]||['',''];
+  document.getElementById('page-title').textContent=t;
+  document.getElementById('page-sub').textContent=s;
+  const actions=document.getElementById('page-actions');
+  if(page==='staff')     actions.innerHTML=`<button class="btn btn-primary" onclick="openAddStaff()"><span class="svg-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span></i> Add staff</button>`;
+  else if(page==='schedule') actions.innerHTML=`<button class="btn btn-success" onclick="renderSchedule()"><span class="svg-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></span></i> Regenerate</button><button class="btn" onclick="exportReport()" style="border-color:#3B6D11;color:#3B6D11"><span class="svg-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span></i> Download Excel</button><button class="btn" onclick="window.print()"><span class="svg-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></span></i> Print</button>`;
+  else if(page==='rules') actions.innerHTML=`<button class="btn btn-primary" onclick="applyRules()"><span class="svg-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></i> Apply & regenerate</button>`;
+  else actions.innerHTML='';
+  if(page==='staff')     renderStaffTable();
+  if(page==='rules')     renderRules();
+  if(page==='reports')   renderReports();
+  if(page==='dashboard') renderDashboard();
+}
+
+function closeModal(id){ document.getElementById(id).classList.add('hidden'); }
+
+function switchTab(tab,el){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  activeTab=tab;
+  document.getElementById('tab-weekly').style.display = tab==='weekly'?'':'none';
+  document.getElementById('tab-daily').style.display  = tab==='daily' ?'':'none';
+  if(tab==='daily') renderDailyDetail();
+}
+
+function renderSchedule(){
+  currentWeekStart=new Date(document.getElementById('week-start').value+'T00:00:00');
+  generateSchedule();
+  renderWeeklyTable();
+  renderDaySelect();
+  renderDailyDetail();
+  const alerts=getScheduleAlerts();
+  document.getElementById('schedule-alerts').innerHTML=alerts.map(a=>`<div class="alert alert-${a.type}"><span class="svg-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span></i><span>${a.msg}</span></div>`).join('');
+  persistAll();
+  renderDashboard();
+  renderReports();
+}
+
+function prevWeek(){ currentWeekStart=new Date(currentWeekStart); currentWeekStart.setDate(currentWeekStart.getDate()-7); document.getElementById('week-start').value=formatDate(currentWeekStart); renderSchedule(); }
+function nextWeek(){ currentWeekStart=new Date(currentWeekStart); currentWeekStart.setDate(currentWeekStart.getDate()+7); document.getElementById('week-start').value=formatDate(currentWeekStart); renderSchedule(); }
+
+function refreshAll(){ generateSchedule(); renderStaffTable(); renderDashboard(); renderReports(); if(activeTab==='weekly') renderWeeklyTable(); else renderDailyDetail(); }
+
+function dutyLabel_excel(val){
+  if(!val||val==='off') return 'Day Off';
+  if(val==='leave') return 'Leave';
+  if(val==='absent') return 'Absent';
+  if(val==='split') return 'Split (07-12 & 19-00)';
+  if(val==='straight-open') return 'STR-O (07:00-15:30)';
+  if(val==='straight-mid') return 'STR-M (09:00-17:30)';
+  if(val==='straight-aft') return 'STR-A (13:00-21:30)';
+  if(val==='straight-close') return 'STR-C (15:30-00:00)';
+  return val;
+}
+
+function exportReport(){
+  if(typeof XLSX === 'undefined'){ alert('Excel library not loaded yet. Please wait a moment and try again.'); return; }
+
+  const wb = XLSX.utils.book_new();
+  const weekDates = getWeekDates(currentWeekStart);
+  const DAYS_FULL = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+  // ── SHEET 1: Weekly Schedule Grid ──
+  const dateHeaders = weekDates.map(d => DAYS_FULL[d.getDay()] + ' ' + d.getDate() + '/' + (d.getMonth()+1));
+  const ws1_data = [];
+
+  // Title row
+  const weekLabel = 'Week of ' + weekDates[0].getDate() + '/' + (weekDates[0].getMonth()+1) + '/' + weekDates[0].getFullYear();
+  ws1_data.push(['RECEPTION DUTY SCHEDULE — ' + weekLabel, '', '', '', '', '', '', '', '']);
+  ws1_data.push(['']); // blank row
+
+  // Header row
+  ws1_data.push(['Employee Name', 'ID', 'Designation', 'Role', ...dateHeaders, 'Total Duty Days']);
+
+  // Data rows
+  staff.forEach(s => {
+    const row = [s.name, s.empId, s.desig, s.role || 'Staff'];
+    let dutyCount = 0;
+    weekDates.forEach(d => {
+      const val = (schedule[formatDate(d)] || {})[s.id];
+      const label = dutyLabel_excel(val);
+      row.push(label);
+      if(val && val !== 'off' && val !== 'leave' && val !== 'absent') dutyCount++;
+    });
+    row.push(dutyCount);
+    ws1_data.push(row);
+  });
+
+  // Blank + legend rows
+  ws1_data.push(['']);
+  ws1_data.push(['LEGEND']);
+  ws1_data.push(['STR-O', '07:00–15:30', 'Open shift (solo opener 07–08)']);
+  ws1_data.push(['STR-M', '09:00–17:30', 'Mid shift']);
+  ws1_data.push(['STR-A', '13:00–21:30', 'Afternoon shift']);
+  ws1_data.push(['STR-C', '15:30–00:00', 'Close shift (solo closer 22:30–00)']);
+  ws1_data.push(['Split', '07–12 & 19–00', 'Split duty — two sessions']);
+  ws1_data.push(['Solo zones:', '07:00–08:00 and 22:30–00:00 require exactly 1 person']);
+
+  const ws1 = XLSX.utils.aoa_to_sheet(ws1_data);
+
+  // Column widths
+  ws1['!cols'] = [
+    {wch:24},{wch:10},{wch:22},{wch:14},
+    {wch:22},{wch:22},{wch:22},{wch:22},{wch:22},{wch:22},{wch:22},
+    {wch:14}
+  ];
+
+  // Merge title cell across all columns
+  ws1['!merges'] = [{s:{r:0,c:0}, e:{r:0,c:11}}];
+
+  XLSX.utils.book_append_sheet(wb, ws1, 'Weekly Schedule');
+
+  // ── SHEET 2: Daily Shift Detail ──
+  const ws2_data = [];
+  ws2_data.push(['DAILY SHIFT DETAIL — ' + weekLabel]);
+  ws2_data.push(['']);
+
+  weekDates.forEach(d => {
+    const ds = formatDate(d);
+    const daySch = schedule[ds] || {};
+    const dayName = DAYS_FULL[d.getDay()] + ', ' + d.getDate() + '/' + (d.getMonth()+1) + '/' + d.getFullYear();
+
+    ws2_data.push([dayName]);
+    ws2_data.push(['Shift', 'Time', 'Employee', 'ID', 'Designation', 'Role', 'Hours']);
+
+    const SHIFT_DETAILS = {
+      'straight-open':  ['STR-O', '07:00–15:30', '8h 30m'],
+      'straight-mid':   ['STR-M', '09:00–17:30', '8h 30m'],
+      'straight-aft':   ['STR-A', '13:00–21:30', '8h 30m'],
+      'straight-close': ['STR-C', '15:30–00:00', '8h 30m'],
+      'split':          ['Split', '07:00–12:00 & 19:00–00:00', '10h (with break)'],
+    };
+
+    const shiftOrder = ['straight-open','straight-mid','straight-aft','straight-close','split'];
+    shiftOrder.forEach(sk => {
+      const assigned = staff.filter(s => daySch[s.id] === sk);
+      assigned.forEach(s => {
+        const sd = SHIFT_DETAILS[sk];
+        ws2_data.push([sd[0], sd[1], s.name, s.empId, s.desig, s.role||'Staff', sd[2]]);
+      });
+    });
+
+    // Off/Leave/Absent
+    const offRow  = staff.filter(s => daySch[s.id] === 'off').map(s => s.name).join(', ');
+    const leaveRow = staff.filter(s => daySch[s.id] === 'leave').map(s => s.name).join(', ');
+    const absentRow = staff.filter(s => daySch[s.id] === 'absent').map(s => s.name).join(', ');
+    if(offRow)    ws2_data.push(['Day Off', '', offRow]);
+    if(leaveRow)  ws2_data.push(['Leave', '', leaveRow]);
+    if(absentRow) ws2_data.push(['Absent', '', absentRow]);
+
+    ws2_data.push(['']); // spacer
+  });
+
+  const ws2 = XLSX.utils.aoa_to_sheet(ws2_data);
+  ws2['!cols'] = [{wch:12},{wch:26},{wch:24},{wch:10},{wch:22},{wch:14},{wch:18}];
+  ws2['!merges'] = [{s:{r:0,c:0},e:{r:0,c:6}}];
+  XLSX.utils.book_append_sheet(wb, ws2, 'Daily Detail');
+
+  // ── SHEET 3: Staff Summary Report ──
+  const counts = {};
+  staff.forEach(s => { counts[s.id] = {straight:0, split:0, off:0, leave:0, absent:0}; });
+  weekDates.forEach(d => {
+    const ds = formatDate(d), ds2 = schedule[ds] || {};
+    staff.forEach(s => {
+      const v = ds2[s.id];
+      if(!v) return;
+      if(v.startsWith('straight')) counts[s.id].straight++;
+      else if(counts[s.id][v] !== undefined) counts[s.id][v]++;
+    });
+  });
+
+  const ws3_data = [];
+  ws3_data.push(['STAFF DUTY SUMMARY — ' + weekLabel]);
+  ws3_data.push(['']);
+  ws3_data.push(['Name','Employee ID','Department','Designation','Role','Status','Straight Days','Split Days','Total Duty Days','Days Off','Leave','Absent','Total Scheduled Hours']);
+
+  staff.forEach(s => {
+    const c = counts[s.id];
+    const totalHours = (c.straight * 8.5) + (c.split * 10);
+    ws3_data.push([
+      s.name, s.empId, s.dept, s.desig, s.role||'Staff', s.status,
+      c.straight, c.split, c.straight + c.split, c.off, c.leave, c.absent,
+      totalHours + 'h'
+    ]);
+  });
+
+  // Totals row
+  const totals = staff.reduce((acc, s) => {
+    const c = counts[s.id];
+    acc.straight += c.straight; acc.split += c.split;
+    acc.off += c.off; acc.leave += c.leave; acc.absent += c.absent;
+    return acc;
+  }, {straight:0,split:0,off:0,leave:0,absent:0});
+  ws3_data.push(['TOTALS','','','','','',totals.straight,totals.split,totals.straight+totals.split,totals.off,totals.leave,totals.absent,((totals.straight*8.5)+(totals.split*10))+'h']);
+
+  const ws3 = XLSX.utils.aoa_to_sheet(ws3_data);
+  ws3['!cols'] = [{wch:24},{wch:12},{wch:14},{wch:22},{wch:14},{wch:12},{wch:14},{wch:12},{wch:16},{wch:10},{wch:8},{wch:8},{wch:18}];
+  ws3['!merges'] = [{s:{r:0,c:0},e:{r:0,c:12}}];
+  XLSX.utils.book_append_sheet(wb, ws3, 'Staff Summary');
+
+  // ── Download ──
+  const fname = 'duty-schedule-' + formatDate(weekDates[0]) + '.xlsx';
+  XLSX.writeFile(wb, fname);
+}
+
+// ===================== UTILS =====================
+function formatDate(d){ return d.toISOString().slice(0,10); }
+function getMonday(d){ const dt=new Date(d), day=dt.getDay(), diff=day===0?-6:1-day; dt.setDate(dt.getDate()+diff); return dt; }
+function getWeekDates(monday){ return Array.from({length:7},(_,i)=>{ const d=new Date(monday); d.setDate(d.getDate()+i); return d; }); }
+function getWeekNumber(d){ const dt=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())); dt.setUTCDate(dt.getUTCDate()+4-(dt.getUTCDay()||7)); const y=new Date(Date.UTC(dt.getUTCFullYear(),0,1)); return Math.ceil((((dt-y)/86400000)+1)/7); }
+
+// ===================== INIT =====================
+window.addEventListener('click', e=>{ if(e.target.classList.contains('modal-overlay')) e.target.classList.add('hidden'); });
+
+// Restore week-start: use Monday of today, regenerate schedule if no stored schedule
+const storedScheduleKeys = Object.keys(schedule);
+if (storedScheduleKeys.length === 0) {
+  // No stored schedule: generate fresh
+  generateSchedule();
+  persistAll();
+} else {
+  // Find the most recent week's Monday in stored schedule
+  const latestDate = storedScheduleKeys.sort().slice(-1)[0];
+  currentWeekStart = getMonday(new Date(latestDate + 'T00:00:00'));
+}
+document.getElementById('week-start').value = formatDate(currentWeekStart);
+
+// Restore config fields
+document.getElementById('cfg-min-staff').value  = config.minStaff;
+document.getElementById('cfg-max-days').value   = config.maxDays;
+document.getElementById('cfg-rotation').value   = config.rotation;
+document.getElementById('cfg-split-ratio').value = config.splitRatio;
+
+renderDashboard();
+renderStaffTable();
+</script>
+
+<!-- Confirm delete modal -->
+<div class="modal-overlay hidden" id="confirm-modal">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header">
+      <h3 style="display:flex;align-items:center;gap:8px"><span style="color:var(--danger);font-size:18px">&#10006;</span> Confirm removal</h3>
+      <button class="btn btn-sm" onclick="closeModal('confirm-modal')">&#x2715;</button>
+    </div>
+    <div class="modal-body">
+      <p id="confirm-msg" style="font-size:13px;color:var(--text-muted);line-height:1.6"></p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('confirm-modal')">Cancel</button>
+      <button class="btn btn-danger" id="confirm-ok" style="background:var(--danger);color:#fff;border-color:var(--danger)">Remove</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>
