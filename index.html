@@ -445,12 +445,11 @@ tr:hover td{background:var(--gray-50)}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
-// ===================== STORAGE =====================
+// ===================== STORAGE — IndexedDB + localStorage dual layer =====================
 // ===================== STORAGE — Supabase =====================
 const SUPABASE_URL  = 'https://kxfmwacpsxzghsogrgap.supabase.co';   // ← paste here
 const SUPABASE_KEY  = 'sb_publishable_PEECl_Y8-YJywpj6htdUFQ_t_ksDCOx';      // ← paste here
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-let staff = DEFAULT_STAFF;
 
 // ── Load all data from Supabase ──
 async function loadAllData() {
@@ -566,9 +565,7 @@ async function deleteConditionFromDB(id) {
 }
 
 let staff = DEFAULT_STAFF;
-
-// ===================== DATA =====================
-let editingStaffId = null;
+let editingStaffId   = null;
 
 /*
   DUTY TYPES:
@@ -616,7 +613,7 @@ const SPLIT = {key:'split', label:'Split duty', short:'SPLIT', time:'07:00–12:
 const DAYS  = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const DSHRT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
-let config = loadFromStorage(STORE_KEY_CONFIG, {minStaff:2, maxDays:5, rotation:4, splitRatio:3});
+let config = {minStaff:2, maxDays:5, rotation:4, splitRatio:3};
 
 let rules = [
   {id:1,title:'Leave & absent staff excluded',desc:'Employees on leave or absent are not scheduled for any duty.',icon:'ti-calendar-off',enabled:true},
@@ -629,19 +626,10 @@ let rules = [
   {id:8,title:'Max consecutive duty days',desc:'No staff member is scheduled for more than the maximum configured consecutive days.',icon:'ti-calendar-stats',enabled:true},
 ];
 
-let customConditions = loadFromStorage(STORE_KEY_CONDITIONS, []);
-let schedule = loadFromStorage(STORE_KEY_SCHEDULE, {});
+let customConditions = [];
+let schedule = {};
 
-// Restore rule enabled states from storage
-(function() {
-  const savedRules = loadFromStorage(STORE_KEY_RULES, null);
-  if (savedRules) {
-    savedRules.forEach(sr => {
-      const r = rules.find(x => x.id === sr.id);
-      if (r) r.enabled = sr.enabled;
-    });
-  }
-})();
+// Rule states will be restored after async load in INIT
 let currentWeekStart = getMonday(new Date());
 let activeTab = 'weekly';
 
@@ -1519,27 +1507,77 @@ function getWeekNumber(d){ const dt=new Date(Date.UTC(d.getFullYear(),d.getMonth
 // ===================== INIT =====================
 window.addEventListener('click', e=>{ if(e.target.classList.contains('modal-overlay')) e.target.classList.add('hidden'); });
 
-// Restore week-start: use Monday of today, regenerate schedule if no stored schedule
-const storedScheduleKeys = Object.keys(schedule);
-if (storedScheduleKeys.length === 0) {
-  // No stored schedule: generate fresh
-  generateSchedule();
-  persistAll();
-} else {
-  // Find the most recent week's Monday in stored schedule
-  const latestDate = storedScheduleKeys.sort().slice(-1)[0];
-  currentWeekStart = getMonday(new Date(latestDate + 'T00:00:00'));
-}
-document.getElementById('week-start').value = formatDate(currentWeekStart);
+// Show loading overlay while data loads
+document.body.insertAdjacentHTML('beforeend',
+  '<div id="app-loading" style="position:fixed;inset:0;background:rgba(247,246,243,.92);z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px">'
+  + '<div style="width:36px;height:36px;border:3px solid #D3D1C7;border-top-color:#185FA5;border-radius:50%;animation:spin .7s linear infinite"></div>'
+  + '<div style="font-size:14px;color:#5F5E5A;font-weight:500">Loading your data…</div>'
+  + '<style>@keyframes spin{to{transform:rotate(360deg)}}</style>'
+  + '</div>'
+);
 
-// Restore config fields
-document.getElementById('cfg-min-staff').value  = config.minStaff;
-document.getElementById('cfg-max-days').value   = config.maxDays;
-document.getElementById('cfg-rotation').value   = config.rotation;
-document.getElementById('cfg-split-ratio').value = config.splitRatio;
+// Async startup: load from IndexedDB/localStorage then render
+(async function init() {
+  try {
+    const saved = await loadAllData();
 
-renderDashboard();
-renderStaffTable();
+    // Restore staff
+    if (saved.staff && saved.staff.length > 0) {
+      staff = saved.staff;
+    }
+
+    // Restore config
+    if (saved.config) {
+      config = saved.config;
+    }
+
+    // Restore conditions
+    if (saved.customConditions) {
+      customConditions = saved.customConditions;
+    }
+
+    // Restore schedule
+    if (saved.schedule && Object.keys(saved.schedule).length > 0) {
+      schedule = saved.schedule;
+    }
+
+    // Restore rule states
+    if (saved.ruleStates && saved.ruleStates.length > 0) {
+      saved.ruleStates.forEach(sr => {
+        const r = rules.find(x => x.id === sr.id);
+        if (r) r.enabled = sr.enabled;
+      });
+    }
+
+    // Set week start
+    const scheduleKeys = Object.keys(schedule);
+    if (scheduleKeys.length === 0) {
+      generateSchedule();
+      persistAll();
+    } else {
+      const latestDate = scheduleKeys.sort().slice(-1)[0];
+      currentWeekStart = getMonday(new Date(latestDate + 'T00:00:00'));
+    }
+    document.getElementById('week-start').value = formatDate(currentWeekStart);
+
+    // Restore config UI fields
+    document.getElementById('cfg-min-staff').value   = config.minStaff;
+    document.getElementById('cfg-max-days').value    = config.maxDays;
+    document.getElementById('cfg-rotation').value    = config.rotation;
+    document.getElementById('cfg-split-ratio').value = config.splitRatio;
+
+  } catch(err) {
+    console.warn('Storage load failed, using defaults:', err);
+    generateSchedule();
+  }
+
+  // Remove loading overlay and render
+  const overlay = document.getElementById('app-loading');
+  if (overlay) overlay.remove();
+
+  renderDashboard();
+  renderStaffTable();
+})();
 </script>
 
 <!-- Confirm delete modal -->
