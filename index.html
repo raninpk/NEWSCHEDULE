@@ -456,160 +456,287 @@ var currentWeekStart = (function(){ var d=new Date(), day=d.getDay(), diff=day==
 var activeTab        = 'weekly';
 
 // ===================== STORAGE — Supabase =====================
-// ── PASTE YOUR SUPABASE CREDENTIALS HERE ──────────────────────
-const SUPABASE_URL = 'https://kxfmwacpsxzghsogrgap.supabase.co';   // e.g. https://abcxyz.supabase.co
-const SUPABASE_KEY = 'sb_publishable_PEECl_Y8-YJywpj6htdUFQ_t_ksDCOx';      // starts with eyJ...
-// ──────────────────────────────────────────────────────────────
+// ▼▼▼ PASTE YOUR SUPABASE CREDENTIALS BELOW ▼▼▼
+const SUPABASE_URL = 'https://kxfmwacpsxzghsogrgap.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_PEECl_Y8-YJywpj6htdUFQ_t_ksDCOx';
+// ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
-// Check credentials are set
-const SUPABASE_READY = SUPABASE_URL !== 'https://kxfmwacpsxzghsogrgap.supabase.co' && SUPABASE_KEY !== 'YOUR_ANON_KEY';
-const sb = SUPABASE_READY ? supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+// ── Connection state ──
+var SUPABASE_READY = false;
+var sb = null;
 
-if (!SUPABASE_READY) {
-  console.warn('⚠ Supabase credentials not set — running in offline mode (IndexedDB).');
+function initSupabase() {
+  if (SUPABASE_URL === 'https://kxfmwacpsxzghsogrgap.supabase.co' || SUPABASE_KEY === 'sb_publishable_PEECl_Y8-YJywpj6htdUFQ_t_ksDCOx') {
+    console.warn('Supabase not configured — using offline mode.');
+    showBanner('⚠ Running offline. Paste your Supabase credentials to enable cloud storage.', 'warning');
+    return false;
+  }
+  try {
+    sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    SUPABASE_READY = true;
+    console.log('✓ Supabase connected:', SUPABASE_URL);
+    return true;
+  } catch(e) {
+    console.error('Supabase init failed:', e);
+    showBanner('⚠ Supabase connection failed: ' + e.message, 'error');
+    return false;
+  }
 }
 
-// ── IndexedDB fallback (used when Supabase not configured) ──
-const DB_NAME = 'DutyPlanDB', DB_VERSION = 1, DB_STORE = 'appdata';
-let _db = null;
-function openDB() {
-  return new Promise((resolve, reject) => {
-    if (_db) { resolve(_db); return; }
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = e => { const db=e.target.result; if(!db.objectStoreNames.contains(DB_STORE)) db.createObjectStore(DB_STORE); };
-    req.onsuccess = e => { _db=e.target.result; resolve(_db); };
-    req.onerror   = e => reject(e.target.error);
-  });
+// ── Persistent banner for connection status ──
+function showBanner(msg, type) {
+  var el = document.getElementById('conn-banner');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'conn-banner';
+    document.body.appendChild(el);
+  }
+  var colors = {
+    warning: 'background:#FFF3CD;color:#7A5C00;border-bottom:1px solid #E6C619',
+    error:   'background:#FCEBEB;color:#A32D2D;border-bottom:1px solid #e0a0a0',
+    success: 'background:#EAF3DE;color:#3B6D11;border-bottom:1px solid #a0cc80'
+  };
+  el.style.cssText = 'position:fixed;top:0;left:0;right:0;padding:8px 16px;font-size:12px;font-weight:500;z-index:99999;text-align:center;' + (colors[type]||colors.warning);
+  el.textContent = msg;
+  if (type === 'success') setTimeout(function(){ el.remove(); }, 3000);
 }
-function idbGet(key) { return openDB().then(db => new Promise(res => { const r=db.transaction(DB_STORE,'readonly').objectStore(DB_STORE).get(key); r.onsuccess=()=>res(r.result); r.onerror=()=>res(null); })); }
-function idbSet(key, val) { return openDB().then(db => new Promise(res => { const r=db.transaction(DB_STORE,'readwrite').objectStore(DB_STORE).put(val,key); r.onsuccess=()=>res(); r.onerror=()=>res(); })); }
-function lsGet(key) { try{ const v=localStorage.getItem(key); return v?JSON.parse(v):null; }catch(e){return null;} }
-function lsSet(key,val) { try{ localStorage.setItem(key,JSON.stringify(val)); }catch(e){} }
 
-// ── Column name remappers (Supabase snake_case ↔ app camelCase) ──
+// ── Toast ──
+function showSaveFlash(msg, isError) {
+  var el = document.getElementById('save-flash');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'save-flash';
+    el.style.cssText = 'position:fixed;bottom:24px;right:24px;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:500;z-index:9999;opacity:0;transition:opacity .25s;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.25)';
+    document.body.appendChild(el);
+  }
+  el.style.background = isError ? '#A32D2D' : '#1a1a18';
+  el.style.color = '#fff';
+  el.textContent = msg;
+  el.style.opacity = '1';
+  clearTimeout(el._t);
+  el._t = setTimeout(function(){ el.style.opacity='0'; }, isError ? 4000 : 2500);
+}
+
+// ── Column remappers ──
 function remapStaff(r) {
-  return { id:r.id, name:r.name, empId:r.emp_id, dept:r.dept||'Reception',
-           desig:r.desig||'', status:r.status||'Available', role:r.role||'', notes:r.notes||'' };
+  return {
+    id:     r.id,
+    name:   r.name   || '',
+    empId:  r.emp_id || '',
+    dept:   r.dept   || 'Reception',
+    desig:  r.desig  || '',
+    status: r.status || 'Available',
+    role:   r.role   || '',
+    notes:  r.notes  || ''
+  };
 }
 function remapConfig(r) {
-  return { minStaff:r.min_staff||2, maxDays:r.max_days||5, rotation:r.rotation||4, splitRatio:r.split_ratio||3 };
+  return {
+    minStaff:   r.min_staff   || 2,
+    maxDays:    r.max_days    || 5,
+    rotation:   r.rotation    || 4,
+    splitRatio: r.split_ratio || 3
+  };
 }
 
-// ── Load all data ──
-async function loadAllData() {
-  if (SUPABASE_READY) {
-    // Load from Supabase
-    showSaveFlash('Loading from database…');
-    const [
-      { data: staffData,  error: e1 },
-      { data: configData, error: e2 },
-      { data: condData,   error: e3 },
-      { data: schedData,  error: e4 }
-    ] = await Promise.all([
+// ── SUPABASE: Load all data on startup ──
+async function loadFromSupabase() {
+  try {
+    showSaveFlash('Loading data…');
+
+    var results = await Promise.all([
       sb.from('staff').select('*').order('id'),
-      sb.from('app_config').select('*').eq('id',1).single(),
+      sb.from('app_config').select('*').eq('id', 1).maybeSingle(),
       sb.from('conditions').select('*').order('id'),
       sb.from('schedule').select('*')
     ]);
 
-    if (e1) console.warn('Staff load error:', e1.message);
+    var staffRes  = results[0];
+    var configRes = results[1];
+    var condRes   = results[2];
+    var schedRes  = results[3];
 
-    // Reshape schedule rows → { 'YYYY-MM-DD': { staffId: dutyType } }
-    const scheduleMap = {};
-    (schedData||[]).forEach(row => {
+    // Log errors but don't crash
+    if (staffRes.error)  console.error('Staff load error:',    staffRes.error);
+    if (configRes.error) console.error('Config load error:',   configRes.error);
+    if (condRes.error)   console.error('Cond load error:',     condRes.error);
+    if (schedRes.error)  console.error('Schedule load error:', schedRes.error);
+
+    // Reshape schedule flat rows → nested map
+    var scheduleMap = {};
+    (schedRes.data || []).forEach(function(row) {
       if (!scheduleMap[row.date]) scheduleMap[row.date] = {};
       scheduleMap[row.date][row.staff_id] = row.duty_type;
     });
 
     return {
-      staff:            (staffData||[]).map(remapStaff),
-      config:           configData ? remapConfig(configData) : null,
-      customConditions: condData||[],
-      schedule:         scheduleMap,
-      ruleStates:       []
+      staff:            (staffRes.data  || []).map(remapStaff),
+      config:           configRes.data  ? remapConfig(configRes.data) : null,
+      customConditions: condRes.data    || [],
+      schedule:         scheduleMap
     };
-  } else {
-    // Fallback: IndexedDB / localStorage
-    const d = {};
-    for (const key of ['staff','config','customConditions','schedule','ruleStates']) {
-      let val = await idbGet(key);
-      if (val===null||val===undefined) val = lsGet('dutyplan_'+key);
-      d[key] = (val!==null&&val!==undefined) ? val : DEFAULT_DATA[key];
-    }
-    return d;
-  }
-}
-
-// ── Save everything ──
-async function persistAll() {
-  showSaveFlash('Saving…');
-  try {
-    if (SUPABASE_READY) {
-      // Save to Supabase
-      const staffRows = staff.map(s => ({
-        id: (typeof s.id==='number' && s.id < 1e13) ? s.id : undefined,
-        name:s.name, emp_id:s.empId, dept:s.dept,
-        desig:s.desig, status:s.status, role:s.role||'', notes:s.notes||''
-      }));
-      await sb.from('staff').upsert(staffRows);
-
-      await sb.from('app_config').upsert({
-        id:1, min_staff:config.minStaff, max_days:config.maxDays,
-        rotation:config.rotation, split_ratio:config.splitRatio
-      });
-
-      if (customConditions.length > 0) {
-        await sb.from('conditions').upsert(customConditions);
-      }
-
-      const schedRows = [];
-      Object.entries(schedule).forEach(([date, dayMap]) => {
-        Object.entries(dayMap).forEach(([staffId, dutyType]) => {
-          schedRows.push({ date, staff_id:parseInt(staffId), duty_type:dutyType });
-        });
-      });
-      if (schedRows.length > 0) {
-        await sb.from('schedule').upsert(schedRows, { onConflict:'date,staff_id' });
-      }
-
-      showSaveFlash('✓ Saved to Supabase');
-    } else {
-      // Fallback: IndexedDB + localStorage
-      const payload = {
-        staff, config, customConditions, schedule,
-        ruleStates: rules.map(r=>({id:r.id,enabled:r.enabled}))
-      };
-      for (const [key,val] of Object.entries(payload)) {
-        idbSet(key, val);
-        lsSet('dutyplan_'+key, val);
-      }
-      showSaveFlash('✓ Saved locally');
-    }
   } catch(err) {
-    console.error('Save error:', err);
-    showSaveFlash('⚠ Save failed — check console');
+    console.error('loadFromSupabase failed:', err);
+    showSaveFlash('⚠ Load failed: ' + err.message, true);
+    return null;
   }
 }
 
-// ── Toast notification ──
-function showSaveFlash(msg) {
-  let el = document.getElementById('save-flash');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'save-flash';
-    el.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#1a1a18;color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:500;z-index:9999;opacity:0;transition:opacity .25s;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.25)';
-    document.body.appendChild(el);
+// ── SUPABASE: Save single staff member (insert or update) ──
+async function sbSaveStaff(s, isNew) {
+  var row = {
+    name:   s.name,
+    emp_id: s.empId,
+    dept:   s.dept   || 'Reception',
+    desig:  s.desig  || '',
+    status: s.status || 'Available',
+    role:   s.role   || '',
+    notes:  s.notes  || ''
+  };
+
+  if (isNew) {
+    var res = await sb.from('staff').insert(row).select().single();
+    if (res.error) throw new Error('Insert failed: ' + res.error.message + ' | ' + JSON.stringify(res.error));
+    return res.data.id; // return the new DB-generated id
+  } else {
+    row.id = s.id;
+    var res = await sb.from('staff').update(row).eq('id', s.id).select().single();
+    if (res.error) throw new Error('Update failed: ' + res.error.message + ' | ' + JSON.stringify(res.error));
+    return s.id;
   }
-  el.textContent = msg;
-  el.style.opacity = '1';
-  clearTimeout(el._t);
-  if (msg.startsWith('✓') || msg.startsWith('⚠')) {
-    el._t = setTimeout(()=>{ el.style.opacity='0'; }, 2500);
+}
+
+// ── SUPABASE: Delete staff member ──
+async function sbDeleteStaff(id) {
+  // Remove their schedule rows first (avoids FK violation)
+  await sb.from('schedule').delete().eq('staff_id', id);
+  var res = await sb.from('staff').delete().eq('id', id);
+  if (res.error) throw new Error('Delete failed: ' + res.error.message);
+}
+
+// ── SUPABASE: Save generated schedule ──
+async function sbSaveSchedule() {
+  if (!SUPABASE_READY) return;
+  try {
+    var rows = [];
+    Object.keys(schedule).forEach(function(date) {
+      var dayMap = schedule[date];
+      Object.keys(dayMap).forEach(function(staffId) {
+        var sId = parseInt(staffId);
+        if (!isNaN(sId) && sId > 0) {
+          rows.push({ date: date, staff_id: sId, duty_type: dayMap[staffId] });
+        }
+      });
+    });
+    if (rows.length === 0) return;
+
+    // Delete existing schedule for these dates then re-insert (cleaner than upsert)
+    var dates = [...new Set(rows.map(function(r){ return r.date; }))];
+    await sb.from('schedule').delete().in('date', dates);
+    var res = await sb.from('schedule').insert(rows);
+    if (res.error) throw new Error('Schedule save failed: ' + res.error.message);
+    console.log('✓ Schedule saved:', rows.length, 'rows');
+  } catch(err) {
+    console.error('sbSaveSchedule error:', err);
+    showSaveFlash('⚠ Schedule not saved: ' + err.message, true);
   }
+}
+
+// ── SUPABASE: Save config ──
+async function sbSaveConfig() {
+  if (!SUPABASE_READY) return;
+  var res = await sb.from('app_config').upsert({
+    id: 1,
+    min_staff:   config.minStaff,
+    max_days:    config.maxDays,
+    rotation:    config.rotation,
+    split_ratio: config.splitRatio
+  });
+  if (res.error) console.error('Config save error:', res.error);
+}
+
+// ── IndexedDB fallback (offline mode) ──
+var _idb = null;
+function openIDB() {
+  return new Promise(function(resolve, reject) {
+    if (_idb) { resolve(_idb); return; }
+    var req = indexedDB.open('DutyPlanDB', 1);
+    req.onupgradeneeded = function(e) {
+      if (!e.target.result.objectStoreNames.contains('appdata'))
+        e.target.result.createObjectStore('appdata');
+    };
+    req.onsuccess = function(e) { _idb = e.target.result; resolve(_idb); };
+    req.onerror   = function(e) { reject(e.target.error); };
+  });
+}
+function idbGet(key) {
+  return openIDB().then(function(db) {
+    return new Promise(function(res) {
+      var r = db.transaction('appdata','readonly').objectStore('appdata').get(key);
+      r.onsuccess = function(){ res(r.result); };
+      r.onerror   = function(){ res(null); };
+    });
+  }).catch(function(){ return null; });
+}
+function idbSet(key, val) {
+  return openIDB().then(function(db) {
+    return new Promise(function(res) {
+      var r = db.transaction('appdata','readwrite').objectStore('appdata').put(val, key);
+      r.onsuccess = function(){ res(); };
+      r.onerror   = function(){ res(); };
+    });
+  }).catch(function(){});
+}
+function lsGet(k) { try{ var v=localStorage.getItem(k); return v?JSON.parse(v):null; }catch(e){return null;} }
+function lsSet(k,v) { try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
+
+// ── Offline: persist everything ──
+async function persistOffline() {
+  var payload = {
+    staff: staff,
+    config: config,
+    customConditions: customConditions,
+    schedule: schedule,
+    ruleStates: rules ? rules.map(function(r){ return {id:r.id,enabled:r.enabled}; }) : []
+  };
+  for (var key in payload) {
+    await idbSet(key, payload[key]);
+    lsSet('dutyplan_' + key, payload[key]);
+  }
+  showSaveFlash('✓ Saved locally (offline mode)');
+}
+
+// ── Main persistAll — routes to Supabase or offline ──
+async function persistAll() {
+  if (SUPABASE_READY) {
+    await sbSaveSchedule();
+    await sbSaveConfig();
+    showSaveFlash('✓ Saved to Supabase');
+  } else {
+    await persistOffline();
+  }
+}
+
+// ── Main loadAllData — called once on startup ──
+async function loadAllData() {
+  if (SUPABASE_READY) {
+    return await loadFromSupabase();
+  }
+  // Offline fallback
+  var d = {};
+  var keys = ['staff','config','customConditions','schedule','ruleStates'];
+  for (var i = 0; i < keys.length; i++) {
+    var k = keys[i];
+    var val = await idbGet(k);
+    if (val === null || val === undefined) val = lsGet('dutyplan_' + k);
+    d[k] = (val !== null && val !== undefined) ? val : DEFAULT_DATA[k];
+  }
+  return d;
 }
 
 // ===================== DATA =====================
-// (declared at top)
+// (all declared at top of script)
 
 /*
   DUTY TYPES:
@@ -1249,6 +1376,271 @@ function editStaff(id) {
   document.getElementById('staff-modal').classList.remove('hidden');
 }
 async function saveStaff() {
+  var name  = document.getElementById('sf-name').value.trim();
+  var empId = document.getElementById('sf-id').value.trim();
+  if (!name || !empId) { alert('Name and Employee ID are required.'); return; }
+
+  var saveBtn = document.querySelector('#staff-modal .btn-primary');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
+
+  var data = {
+    name:   name,
+    empId:  empId,
+    dept:   document.getElementById('sf-dept').value.trim() || 'Reception',
+    desig:  document.getElementById('sf-desig').value,
+    status: document.getElementById('sf-status').value,
+    role:   document.getElementById('sf-role').value,
+    notes:  document.getElementById('sf-notes').value.trim()
+  };
+
+  try {
+    if (SUPABASE_READY) {
+      var isNew = !editingStaffId;
+      if (!isNew) data.id = editingStaffId;
+      var newId = await sbSaveStaff(data, isNew);
+      data.id = newId;
+      if (isNew) {
+        staff.push(data);
+      } else {
+        var idx = staff.findIndex(function(s){ return s.id === editingStaffId; });
+        if (idx > -1) staff[idx] = Object.assign({}, staff[idx], data);
+      }
+      showSaveFlash('✓ Staff saved to Supabase');
+    } else {
+      // Offline
+      if (editingStaffId) {
+        var idx = staff.findIndex(function(s){ return s.id === editingStaffId; });
+        if (idx > -1) staff[idx] = Object.assign({}, staff[idx], data);
+      } else {
+        data.id = Date.now();
+        staff.push(data);
+      }
+      await persistOffline();
+    }
+    closeModal('staff-modal');
+    renderStaffTable();
+    renderDashboard();
+  } catch(err) {
+    console.error('saveStaff error:', err);
+    alert('Save failed: ' + err.message);
+  } finally {
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save';
+    }
+  }
+}
+
+function editStaff(id) {
+  const s = staff.find(x => x.id === id); if (!s) return;
+  editingStaffId = id;
+  document.getElementById('staff-modal-title').textContent = 'Edit staff member';
+  document.getElementById('sf-name').value   = s.name;
+  document.getElementById('sf-id').value     = s.empId;
+  document.getElementById('sf-dept').value   = s.dept;
+  document.getElementById('sf-desig').value  = s.desig;
+  document.getElementById('sf-status').value = s.status;
+  document.getElementById('sf-role').value   = s.role||'';
+  document.getElementById('sf-notes').value  = s.notes||'';
+  document.getElementById('staff-modal').classList.remove('hidden');
+}
+async function saveStaff() {
+  const name  = document.getElementById('sf-name').value.trim();
+  const empId = document.getElementById('sf-id').value.trim();
+  if (!name || !empId) { alert('Name and Employee ID are required.'); return; }
+
+  // Disable save button to prevent double-clicks
+  const saveBtn = document.querySelector('#staff-modal .btn-primary');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
+
+  const data = {
+    name, empId,
+    dept:   document.getElementById('sf-dept').value.trim() || 'Reception',
+    desig:  document.getElementById('sf-desig').value,
+    status: document.getElementById('sf-status').value,
+    role:   document.getElementById('sf-role').value,
+    notes:  document.getElementById('sf-notes').value.trim(),
+  };
+
+  try {
+    if (SUPABASE_READY) {
+      if (editingStaffId) {
+        // UPDATE existing staff in Supabase
+        const { error } = await sb.from('staff').update({
+          name:     data.name,
+          emp_id:   data.empId,
+          dept:     data.dept,
+          desig:    data.desig,
+          status:   data.status,
+          role:     data.role,
+          notes:    data.notes
+        }).eq('id', editingStaffId);
+        if (error) throw error;
+        const i = staff.findIndex(s => s.id === editingStaffId);
+        if (i > -1) staff[i] = { ...staff[i], ...data };
+      } else {
+        // INSERT new staff into Supabase — let DB generate the id
+        const { data: row, error } = await sb.from('staff').insert({
+          name:   data.name,
+          emp_id: data.empId,
+          dept:   data.dept,
+          desig:  data.desig,
+          status: data.status,
+          role:   data.role,
+          notes:  data.notes
+        }).select().single();
+        if (error) throw error;
+        data.id = row.id;  // use real DB id
+        staff.push(data);
+      }
+      showSaveFlash('✓ Staff saved to Supabase');
+    } else {
+      // Offline mode — use local id
+      if (editingStaffId) {
+        const i = staff.findIndex(s => s.id === editingStaffId);
+        if (i > -1) staff[i] = { ...staff[i], ...data };
+      } else {
+        data.id = Date.now();
+        staff.push(data);
+      }
+      await persistAll();
+    }
+  } catch (err) {
+    console.error('saveStaff error:', err);
+    alert('Could not save: ' + (err.message || 'Unknown error. Check console.'));
+    return;
+  } finally {
+    // Re-enable button
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.innerHTML = '<span class="svg-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Save';
+    }
+  }
+
+  closeModal('staff-modal');
+  renderStaffTable();
+  renderDashboard();
+}
+function deleteStaff(id) {
+  var s = staff.find(function(x){ return x.id === id; });
+  if (!s) return;
+  document.getElementById('confirm-msg').textContent = 'Remove "' + s.name + '" from the roster? This cannot be undone.';
+  document.getElementById('confirm-modal').classList.remove('hidden');
+  document.getElementById('confirm-ok').onclick = async function() {
+    var btn = document.getElementById('confirm-ok');
+    btn.disabled = true;
+    btn.textContent = 'Removing…';
+    try {
+      if (SUPABASE_READY) {
+        await sbDeleteStaff(id);
+        showSaveFlash('✓ Staff removed from Supabase');
+      }
+      staff = staff.filter(function(x){ return x.id !== id; });
+      if (!SUPABASE_READY) await persistOffline();
+      closeModal('confirm-modal');
+      refreshAll();
+    } catch(err) {
+      console.error('deleteStaff error:', err);
+      alert('Delete failed: ' + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Remove';
+    }
+  };
+}
+
+function openAddStaff() {
+  editingStaffId = null;
+  document.getElementById('staff-modal-title').textContent = 'Add staff member';
+  ['sf-name','sf-id','sf-dept','sf-notes'].forEach(id => document.getElementById(id).value='');
+  document.getElementById('sf-desig').value  = 'Receptionist';
+  document.getElementById('sf-status').value = 'Available';
+  document.getElementById('sf-role').value   = '';
+  document.getElementById('staff-modal').classList.remove('hidden');
+}
+function editStaff(id) {
+  const s = staff.find(x => x.id === id); if (!s) return;
+  editingStaffId = id;
+  document.getElementById('staff-modal-title').textContent = 'Edit staff member';
+  document.getElementById('sf-name').value   = s.name;
+  document.getElementById('sf-id').value     = s.empId;
+  document.getElementById('sf-dept').value   = s.dept;
+  document.getElementById('sf-desig').value  = s.desig;
+  document.getElementById('sf-status').value = s.status;
+  document.getElementById('sf-role').value   = s.role||'';
+  document.getElementById('sf-notes').value  = s.notes||'';
+  document.getElementById('staff-modal').classList.remove('hidden');
+}
+async function saveStaff() {
+  var name  = document.getElementById('sf-name').value.trim();
+  var empId = document.getElementById('sf-id').value.trim();
+  if (!name || !empId) { alert('Name and Employee ID are required.'); return; }
+
+  var saveBtn = document.querySelector('#staff-modal .btn-primary');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
+
+  var data = {
+    name:   name,
+    empId:  empId,
+    dept:   document.getElementById('sf-dept').value.trim() || 'Reception',
+    desig:  document.getElementById('sf-desig').value,
+    status: document.getElementById('sf-status').value,
+    role:   document.getElementById('sf-role').value,
+    notes:  document.getElementById('sf-notes').value.trim()
+  };
+
+  try {
+    if (SUPABASE_READY) {
+      var isNew = !editingStaffId;
+      if (!isNew) data.id = editingStaffId;
+      var newId = await sbSaveStaff(data, isNew);
+      data.id = newId;
+      if (isNew) {
+        staff.push(data);
+      } else {
+        var idx = staff.findIndex(function(s){ return s.id === editingStaffId; });
+        if (idx > -1) staff[idx] = Object.assign({}, staff[idx], data);
+      }
+      showSaveFlash('✓ Staff saved to Supabase');
+    } else {
+      // Offline
+      if (editingStaffId) {
+        var idx = staff.findIndex(function(s){ return s.id === editingStaffId; });
+        if (idx > -1) staff[idx] = Object.assign({}, staff[idx], data);
+      } else {
+        data.id = Date.now();
+        staff.push(data);
+      }
+      await persistOffline();
+    }
+    closeModal('staff-modal');
+    renderStaffTable();
+    renderDashboard();
+  } catch(err) {
+    console.error('saveStaff error:', err);
+    alert('Save failed: ' + err.message);
+  } finally {
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save';
+    }
+  }
+}
+
+function editStaff(id) {
+  const s = staff.find(x => x.id === id); if (!s) return;
+  editingStaffId = id;
+  document.getElementById('staff-modal-title').textContent = 'Edit staff member';
+  document.getElementById('sf-name').value   = s.name;
+  document.getElementById('sf-id').value     = s.empId;
+  document.getElementById('sf-dept').value   = s.dept;
+  document.getElementById('sf-desig').value  = s.desig;
+  document.getElementById('sf-status').value = s.status;
+  document.getElementById('sf-role').value   = s.role||'';
+  document.getElementById('sf-notes').value  = s.notes||'';
+  document.getElementById('staff-modal').classList.remove('hidden');
+}
+async function saveStaff() {
   const name  = document.getElementById('sf-name').value.trim();
   const empId = document.getElementById('sf-id').value.trim();
   if (!name || !empId) { alert('Name and Employee ID are required.'); return; }
@@ -1660,8 +2052,11 @@ document.body.insertAdjacentHTML('beforeend',
   + '</div>'
 );
 
-// Async startup: load from IndexedDB/localStorage then render
+// Async startup
 (async function init() {
+  // Step 1: initialise Supabase (sets SUPABASE_READY and sb)
+  initSupabase();
+
   try {
     const saved = await loadAllData();
 
