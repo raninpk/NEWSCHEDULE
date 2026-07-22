@@ -442,93 +442,147 @@ tr:hover td{background:var(--gray-50)}
     </div>
   </div>
 </div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
-// ===================== STORAGE — IndexedDB + localStorage dual layer =====================
 // ===================== STORAGE — Supabase =====================
-const SUPABASE_URL  = 'https://kxfmwacpsxzghsogrgap.supabase.co';   // ← paste here
-const SUPABASE_KEY  = 'sb_publishable_PEECl_Y8-YJywpj6htdUFQ_t_ksDCOx';      // ← paste here
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// ── PASTE YOUR SUPABASE CREDENTIALS HERE ──────────────────────
+const SUPABASE_URL = 'https://kxfmwacpsxzghsogrgap.supabase.co';   // e.g. https://abcxyz.supabase.co
+const SUPABASE_KEY = 'sb_publishable_PEECl_Y8-YJywpj6htdUFQ_t_ksDCOx';      // starts with eyJ...
+// ──────────────────────────────────────────────────────────────
 
-// ── Load all data from Supabase ──
-async function loadAllData() {
-  const [
-    { data: staffData },
-    { data: configData },
-    { data: condData },
-    { data: schedData }
-  ] = await Promise.all([
-    sb.from('staff').select('*').order('id'),
-    sb.from('app_config').select('*').eq('id', 1).single(),
-    sb.from('conditions').select('*').order('id'),
-    sb.from('schedule').select('*')
-  ]);
+// Check credentials are set
+const SUPABASE_READY = SUPABASE_URL !== 'YOUR_PROJECT_URL' && SUPABASE_KEY !== 'YOUR_ANON_KEY';
+const sb = SUPABASE_READY ? supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
-  // Remap schedule rows → { 'YYYY-MM-DD': { staffId: dutyType } }
-  const scheduleMap = {};
-  (schedData || []).forEach(row => {
-    if (!scheduleMap[row.date]) scheduleMap[row.date] = {};
-    scheduleMap[row.date][row.staff_id] = row.duty_type;
-  });
-
-  return {
-    staff:            (staffData || []).map(remapStaff),
-    config:           configData ? remapConfig(configData) : null,
-    customConditions: condData || [],
-    schedule:         scheduleMap,
-    ruleStates:       []
-  };
+if (!SUPABASE_READY) {
+  console.warn('⚠ Supabase credentials not set — running in offline mode (IndexedDB).');
 }
 
-// Column name remappers (Supabase uses snake_case)
+// ── IndexedDB fallback (used when Supabase not configured) ──
+const DB_NAME = 'DutyPlanDB', DB_VERSION = 1, DB_STORE = 'appdata';
+let _db = null;
+function openDB() {
+  return new Promise((resolve, reject) => {
+    if (_db) { resolve(_db); return; }
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = e => { const db=e.target.result; if(!db.objectStoreNames.contains(DB_STORE)) db.createObjectStore(DB_STORE); };
+    req.onsuccess = e => { _db=e.target.result; resolve(_db); };
+    req.onerror   = e => reject(e.target.error);
+  });
+}
+function idbGet(key) { return openDB().then(db => new Promise(res => { const r=db.transaction(DB_STORE,'readonly').objectStore(DB_STORE).get(key); r.onsuccess=()=>res(r.result); r.onerror=()=>res(null); })); }
+function idbSet(key, val) { return openDB().then(db => new Promise(res => { const r=db.transaction(DB_STORE,'readwrite').objectStore(DB_STORE).put(val,key); r.onsuccess=()=>res(); r.onerror=()=>res(); })); }
+function lsGet(key) { try{ const v=localStorage.getItem(key); return v?JSON.parse(v):null; }catch(e){return null;} }
+function lsSet(key,val) { try{ localStorage.setItem(key,JSON.stringify(val)); }catch(e){} }
+
+// ── Column name remappers (Supabase snake_case ↔ app camelCase) ──
 function remapStaff(r) {
-  return { id:r.id, name:r.name, empId:r.emp_id, dept:r.dept,
-           desig:r.desig, status:r.status, role:r.role||'', notes:r.notes||'' };
+  return { id:r.id, name:r.name, empId:r.emp_id, dept:r.dept||'Reception',
+           desig:r.desig||'', status:r.status||'Available', role:r.role||'', notes:r.notes||'' };
 }
 function remapConfig(r) {
-  return { minStaff:r.min_staff, maxDays:r.max_days, rotation:r.rotation, splitRatio:r.split_ratio };
+  return { minStaff:r.min_staff||2, maxDays:r.max_days||5, rotation:r.rotation||4, splitRatio:r.split_ratio||3 };
 }
 
-// ── Save all data to Supabase ──
-async function persistAll() {
-  showSaveFlash('Saving…');
-  try {
-    // Upsert staff
-    await sb.from('staff').upsert(
-      staff.map(s => ({ id:s.id, name:s.name, emp_id:s.empId, dept:s.dept,
-                        desig:s.desig, status:s.status, role:s.role, notes:s.notes }))
-    );
+// ── Load all data ──
+async function loadAllData() {
+  if (SUPABASE_READY) {
+    // Load from Supabase
+    showSaveFlash('Loading from database…');
+    const [
+      { data: staffData,  error: e1 },
+      { data: configData, error: e2 },
+      { data: condData,   error: e3 },
+      { data: schedData,  error: e4 }
+    ] = await Promise.all([
+      sb.from('staff').select('*').order('id'),
+      sb.from('app_config').select('*').eq('id',1).single(),
+      sb.from('conditions').select('*').order('id'),
+      sb.from('schedule').select('*')
+    ]);
 
-    // Update config
-    await sb.from('app_config').upsert({
-      id:1, min_staff:config.minStaff, max_days:config.maxDays,
-      rotation:config.rotation, split_ratio:config.splitRatio
+    if (e1) console.warn('Staff load error:', e1.message);
+
+    // Reshape schedule rows → { 'YYYY-MM-DD': { staffId: dutyType } }
+    const scheduleMap = {};
+    (schedData||[]).forEach(row => {
+      if (!scheduleMap[row.date]) scheduleMap[row.date] = {};
+      scheduleMap[row.date][row.staff_id] = row.duty_type;
     });
 
-    // Upsert conditions
-    if (customConditions.length > 0) {
-      await sb.from('conditions').upsert(customConditions);
+    return {
+      staff:            (staffData||[]).map(remapStaff),
+      config:           configData ? remapConfig(configData) : null,
+      customConditions: condData||[],
+      schedule:         scheduleMap,
+      ruleStates:       []
+    };
+  } else {
+    // Fallback: IndexedDB / localStorage
+    const d = {};
+    for (const key of ['staff','config','customConditions','schedule','ruleStates']) {
+      let val = await idbGet(key);
+      if (val===null||val===undefined) val = lsGet('dutyplan_'+key);
+      d[key] = (val!==null&&val!==undefined) ? val : DEFAULT_DATA[key];
     }
-
-    // Upsert schedule rows
-    const schedRows = [];
-    Object.entries(schedule).forEach(([date, dayMap]) => {
-      Object.entries(dayMap).forEach(([staffId, dutyType]) => {
-        schedRows.push({ date, staff_id: parseInt(staffId), duty_type: dutyType });
-      });
-    });
-    if (schedRows.length > 0) {
-      await sb.from('schedule').upsert(schedRows, { onConflict: 'date,staff_id' });
-    }
-
-    showSaveFlash('✓ Saved to database');
-  } catch(err) {
-    console.error('Save failed:', err);
-    showSaveFlash('⚠ Save failed');
+    return d;
   }
 }
 
+// ── Save everything ──
+async function persistAll() {
+  showSaveFlash('Saving…');
+  try {
+    if (SUPABASE_READY) {
+      // Save to Supabase
+      const staffRows = staff.map(s => ({
+        id: (typeof s.id==='number' && s.id < 1e13) ? s.id : undefined,
+        name:s.name, emp_id:s.empId, dept:s.dept,
+        desig:s.desig, status:s.status, role:s.role||'', notes:s.notes||''
+      }));
+      await sb.from('staff').upsert(staffRows);
+
+      await sb.from('app_config').upsert({
+        id:1, min_staff:config.minStaff, max_days:config.maxDays,
+        rotation:config.rotation, split_ratio:config.splitRatio
+      });
+
+      if (customConditions.length > 0) {
+        await sb.from('conditions').upsert(customConditions);
+      }
+
+      const schedRows = [];
+      Object.entries(schedule).forEach(([date, dayMap]) => {
+        Object.entries(dayMap).forEach(([staffId, dutyType]) => {
+          schedRows.push({ date, staff_id:parseInt(staffId), duty_type:dutyType });
+        });
+      });
+      if (schedRows.length > 0) {
+        await sb.from('schedule').upsert(schedRows, { onConflict:'date,staff_id' });
+      }
+
+      showSaveFlash('✓ Saved to Supabase');
+    } else {
+      // Fallback: IndexedDB + localStorage
+      const payload = {
+        staff, config, customConditions, schedule,
+        ruleStates: rules.map(r=>({id:r.id,enabled:r.enabled}))
+      };
+      for (const [key,val] of Object.entries(payload)) {
+        idbSet(key, val);
+        lsSet('dutyplan_'+key, val);
+      }
+      showSaveFlash('✓ Saved locally');
+    }
+  } catch(err) {
+    console.error('Save error:', err);
+    showSaveFlash('⚠ Save failed — check console');
+  }
+}
+
+// ── Toast notification ──
 function showSaveFlash(msg) {
   let el = document.getElementById('save-flash');
   if (!el) {
@@ -540,32 +594,14 @@ function showSaveFlash(msg) {
   el.textContent = msg;
   el.style.opacity = '1';
   clearTimeout(el._t);
-  if (msg.startsWith('✓')) el._t = setTimeout(() => { el.style.opacity = '0'; }, 2500);
+  if (msg.startsWith('✓') || msg.startsWith('⚠')) {
+    el._t = setTimeout(()=>{ el.style.opacity='0'; }, 2500);
+  }
 }
 
-// ── Add / Update single staff in Supabase (used after save modal) ──
-async function saveStaffToDB(s) {
-  const { data, error } = await sb.from('staff').upsert({
-    id: s.id > 1000000 ? undefined : s.id,  // new records don't send temp id
-    name:s.name, emp_id:s.empId, dept:s.dept,
-    desig:s.desig, status:s.status, role:s.role, notes:s.notes
-  }).select().single();
-  if (data) s.id = data.id;   // replace temp id with real DB id
-  return s;
-}
-
-// ── Delete staff from Supabase ──
-async function deleteStaffFromDB(id) {
-  await sb.from('staff').delete().eq('id', id);
-}
-
-// ── Delete condition from Supabase ──
-async function deleteConditionFromDB(id) {
-  if (id) await sb.from('conditions').delete().eq('id', id);
-}
-
-let staff = DEFAULT_STAFF;
-let editingStaffId   = null;
+// ===================== DATA =====================
+let staff          = DEFAULT_STAFF;
+let editingStaffId = null;
 
 /*
   DUTY TYPES:
@@ -1207,7 +1243,11 @@ function editStaff(id) {
 async function saveStaff() {
   const name  = document.getElementById('sf-name').value.trim();
   const empId = document.getElementById('sf-id').value.trim();
-  if (!name || !empId) { alert('Name and ID are required.'); return; }
+  if (!name || !empId) { alert('Name and Employee ID are required.'); return; }
+
+  // Disable save button to prevent double-clicks
+  const saveBtn = document.querySelector('#staff-modal .btn-primary');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
 
   const data = {
     name, empId,
@@ -1218,37 +1258,92 @@ async function saveStaff() {
     notes:  document.getElementById('sf-notes').value.trim(),
   };
 
-  showSaveFlash('Saving…');
-  if (editingStaffId) {
-    const idx = staff.findIndex(s => s.id === editingStaffId);
-    staff[idx] = { ...staff[idx], ...data };
-    await sb.from('staff').update({
-      name:data.name, emp_id:data.empId, dept:data.dept, desig:data.desig,
-      status:data.status, role:data.role, notes:data.notes
-    }).eq('id', editingStaffId);
-  } else {
-    const { data: row } = await sb.from('staff').insert({
-      name:data.name, emp_id:data.empId, dept:data.dept, desig:data.desig,
-      status:data.status, role:data.role, notes:data.notes
-    }).select().single();
-    data.id = row.id;
-    staff.push(data);
+  try {
+    if (SUPABASE_READY) {
+      if (editingStaffId) {
+        // UPDATE existing staff in Supabase
+        const { error } = await sb.from('staff').update({
+          name:     data.name,
+          emp_id:   data.empId,
+          dept:     data.dept,
+          desig:    data.desig,
+          status:   data.status,
+          role:     data.role,
+          notes:    data.notes
+        }).eq('id', editingStaffId);
+        if (error) throw error;
+        const i = staff.findIndex(s => s.id === editingStaffId);
+        if (i > -1) staff[i] = { ...staff[i], ...data };
+      } else {
+        // INSERT new staff into Supabase — let DB generate the id
+        const { data: row, error } = await sb.from('staff').insert({
+          name:   data.name,
+          emp_id: data.empId,
+          dept:   data.dept,
+          desig:  data.desig,
+          status: data.status,
+          role:   data.role,
+          notes:  data.notes
+        }).select().single();
+        if (error) throw error;
+        data.id = row.id;  // use real DB id
+        staff.push(data);
+      }
+      showSaveFlash('✓ Staff saved to Supabase');
+    } else {
+      // Offline mode — use local id
+      if (editingStaffId) {
+        const i = staff.findIndex(s => s.id === editingStaffId);
+        if (i > -1) staff[i] = { ...staff[i], ...data };
+      } else {
+        data.id = Date.now();
+        staff.push(data);
+      }
+      await persistAll();
+    }
+  } catch (err) {
+    console.error('saveStaff error:', err);
+    alert('Could not save: ' + (err.message || 'Unknown error. Check console.'));
+    return;
+  } finally {
+    // Re-enable button
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.innerHTML = '<span class="svg-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Save';
+    }
   }
-  showSaveFlash('✓ Saved');
+
   closeModal('staff-modal');
-  refreshAll();
+  renderStaffTable();
+  renderDashboard();
 }
 function deleteStaff(id) {
   const s = staff.find(x => x.id === id);
   if (!s) return;
-  document.getElementById('confirm-msg').textContent = `Remove "${s.name}"?`;
+  document.getElementById('confirm-msg').textContent = 'Remove "' + s.name + '" from the roster? This cannot be undone.';
   document.getElementById('confirm-modal').classList.remove('hidden');
   document.getElementById('confirm-ok').onclick = async function() {
-    await sb.from('staff').delete().eq('id', id);
-    staff = staff.filter(x => x.id !== id);
-    closeModal('confirm-modal');
-    refreshAll();
-    showSaveFlash('✓ Staff removed');
+    const btn = document.getElementById('confirm-ok');
+    btn.disabled = true; btn.textContent = 'Removing…';
+    try {
+      if (SUPABASE_READY) {
+        // Delete schedule rows for this staff first (foreign key)
+        await sb.from('schedule').delete().eq('staff_id', id);
+        // Delete the staff member
+        const { error } = await sb.from('staff').delete().eq('id', id);
+        if (error) throw error;
+        showSaveFlash('✓ Staff removed from Supabase');
+      }
+      staff = staff.filter(x => x.id !== id);
+      if (!SUPABASE_READY) await persistAll();
+      closeModal('confirm-modal');
+      refreshAll();
+    } catch(err) {
+      console.error('deleteStaff error:', err);
+      alert('Could not delete: ' + (err.message || 'Unknown error'));
+    } finally {
+      btn.disabled = false; btn.textContent = 'Remove';
+    }
   };
 }
 
@@ -1259,22 +1354,63 @@ function openAddCondition() {
   document.getElementById('cond-desc').value='';
   document.getElementById('condition-modal').classList.remove('hidden');
 }
-function saveCondition() {
+async function saveCondition() {
   const name=document.getElementById('cond-name').value.trim();
   if(!name){alert('Name required.');return;}
-  customConditions.push({name,desc:document.getElementById('cond-desc').value.trim(),applies:document.getElementById('cond-applies').value,priority:document.getElementById('cond-priority').value});
-  persistAll();
+  const newCond = {name, desc:document.getElementById('cond-desc').value.trim(), applies:document.getElementById('cond-applies').value, priority:document.getElementById('cond-priority').value};
+  try {
+    if (SUPABASE_READY) {
+      const { data:row, error } = await sb.from('conditions').insert({
+        name:newCond.name, description:newCond.desc,
+        applies_to:newCond.applies, priority:newCond.priority
+      }).select().single();
+      if (error) throw error;
+      newCond.id = row.id;
+      showSaveFlash('✓ Condition saved');
+    }
+    customConditions.push(newCond);
+    if (!SUPABASE_READY) await persistAll();
+  } catch(err) {
+    console.error('saveCondition error:', err);
+    alert('Could not save condition: ' + (err.message||'Unknown error'));
+    return;
+  }
   closeModal('condition-modal');
   renderRules();
 }
-function deleteCondition(i){ customConditions.splice(i,1); persistAll(); renderRules(); }
+async function deleteCondition(i) {
+  const cond = customConditions[i];
+  try {
+    if (SUPABASE_READY && cond && cond.id) {
+      const { error } = await sb.from('conditions').delete().eq('id', cond.id);
+      if (error) throw error;
+      showSaveFlash('✓ Condition removed');
+    }
+    customConditions.splice(i, 1);
+    if (!SUPABASE_READY) await persistAll();
+    renderRules();
+  } catch(err) {
+    console.error('deleteCondition error:', err);
+    alert('Could not delete: ' + (err.message||'Unknown error'));
+  }
+}
 function applyRules(){
   config.minStaff    = parseInt(document.getElementById('cfg-min-staff').value)||2;
   config.maxDays     = parseInt(document.getElementById('cfg-max-days').value)||5;
   config.rotation    = parseInt(document.getElementById('cfg-rotation').value)||4;
   config.splitRatio  = parseInt(document.getElementById('cfg-split-ratio').value)||3;
   generateSchedule();
-  persistAll();
+  if (SUPABASE_READY) {
+    sb.from('app_config').upsert({
+      id:1, min_staff:config.minStaff, max_days:config.maxDays,
+      rotation:config.rotation, split_ratio:config.splitRatio
+    }).then(({error}) => {
+      if (error) console.warn('Config save error:', error.message);
+      else showSaveFlash('✓ Settings saved to Supabase');
+    });
+  } else {
+    persistAll();
+  }
   renderDashboard();
   renderReports();
   alert('Settings applied and schedule regenerated.');
