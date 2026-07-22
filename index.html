@@ -462,7 +462,7 @@ const SUPABASE_KEY = 'sb_publishable_PEECl_Y8-YJywpj6htdUFQ_t_ksDCOx';      // s
 // ──────────────────────────────────────────────────────────────
 
 // Check credentials are set
-const SUPABASE_READY = SUPABASE_URL !== 'https://kxfmwacpsxzghsogrgap.supabase.co' && SUPABASE_KEY !== 'sb_publishable_PEECl_Y8-YJywpj6htdUFQ_t_ksDCOx';
+const SUPABASE_READY = SUPABASE_URL !== 'https://kxfmwacpsxzghsogrgap.supabase.co' && SUPABASE_KEY !== 'YOUR_ANON_KEY';
 const sb = SUPABASE_READY ? supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 if (!SUPABASE_READY) {
