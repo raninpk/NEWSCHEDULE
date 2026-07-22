@@ -1,3 +1,216 @@
+
+Claude finished the response
+Sure! Step 5 is the most important part. Let me break it down section by section.
+
+What Step 5 does
+You're replacing the storage brain of the app. Currently the app saves data to the browser (IndexedDB). Step 5 swaps that out so data saves to Supabase's cloud database instead.
+
+How to find the right place in the file
+Open duty-scheduler.html in a text editor (Notepad, VS Code, Notepad++ — anything works).
+
+Press Ctrl+F and search for:
+
+STORAGE — IndexedDB + localStorage dual layer
+You'll land on a block that looks like this:
+
+js
+// ===================== STORAGE — IndexedDB + localStorage dual layer =====================
+const DB_NAME    = 'DutyPlanDB';
+const DB_VERSION = 1;
+...
+...
+let staff = DEFAULT_STAFF;   ← this is the END of the block
+Select everything from that comment down to and including let staff = DEFAULT_STAFF; — that's what you're replacing.
+
+What you're replacing it with — line by line
+Part A — Connect to Supabase
+js
+const SUPABASE_URL = 'YOUR_PROJECT_URL';
+const SUPABASE_KEY = 'YOUR_ANON_KEY';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+This creates a connection to your Supabase database. Think of sb as a pipe between your app and the database. You paste your own URL and key here from your Supabase dashboard (Settings → API).
+
+Part B — loadAllData() — reading from the database
+js
+async function loadAllData() {
+  const [
+    { data: staffData },
+    { data: configData },
+    ...
+  ] = await Promise.all([
+    sb.from('staff').select('*').order('id'),
+    ...
+  ]);
+This runs when the page loads. It fetches all your tables at once — staff, config, schedule, conditions — and returns them to the app. Promise.all means all 4 fetches happen simultaneously so the page loads fast.
+
+The schedule rows come back as a flat list like:
+
+{ date: '2025-07-21', staff_id: 3, duty_type: 'straight-open' }
+{ date: '2025-07-21', staff_id: 5, duty_type: 'split' }
+So there's a small conversion that reshapes them into the format the app expects:
+
+js
+// converts flat rows → { '2025-07-21': { 3: 'straight-open', 5: 'split' } }
+const scheduleMap = {};
+(schedData || []).forEach(row => {
+  if (!scheduleMap[row.date]) scheduleMap[row.date] = {};
+  scheduleMap[row.date][row.staff_id] = row.duty_type;
+});
+Part C — remapStaff() and remapConfig() — name translation
+js
+function remapStaff(r) {
+  return { id:r.id, name:r.name, empId:r.emp_id, ... };
+}
+Supabase uses snake_case column names (emp_id, min_staff) but the app uses camelCase (empId, minStaff). These two tiny functions translate between them so nothing breaks.
+
+Part D — persistAll() — saving to the database
+js
+async function persistAll() {
+  await sb.from('staff').upsert(...);
+  await sb.from('app_config').upsert(...);
+  await sb.from('schedule').upsert(...);
+}
+This runs every time you make a change — adding staff, generating a schedule, etc.
+
+Upsert means insert if new, update if already exists — so you never get duplicate rows, it just overwrites the old data cleanly.
+
+Part E — showSaveFlash() — the save indicator
+js
+function showSaveFlash(msg) { ... }
+This just shows the small "✓ Saved to database" toast message in the bottom-right corner so you can see that data actually reached Supabase. Nothing database-related, just UI feedback.
+
+Part F — Individual helpers
+js
+async function saveStaffToDB(s) { ... }
+async function deleteStaffFromDB(id) { ... }
+async function deleteConditionFromDB(id) { ... }
+These are shortcuts used by Steps 6 and 7. Instead of always saving everything, these let you save or delete just one specific record — faster and cleaner.
+
+Part G — The last line
+js
+let staff = DEFAULT_STAFF;
+This keeps the staff variable declared so the rest of the app doesn't break while data is still loading from Supabase. It gets overwritten immediately once loadAllData() finishes.
+
+The before/after in plain English
+Before (IndexedDB)	After (Supabase)
+Data saved inside your browser	Data saved in a cloud database
+Only works on one device	Works on any device, any browser
+Data lost if you clear browser	Data permanent in Supabase
+No real-time sharing	Everyone sees the same data
+Offline capable	Needs internet connection
+Common mistakes to avoid
+1. Leaving the placeholder text
+
+js
+// ❌ Wrong — you forgot to paste your actual values
+const SUPABASE_URL = 'YOUR_PROJECT_URL';
+
+// ✅ Right
+const SUPABASE_URL = 'https://abcdefgh.supabase.co';
+2. Selecting too little or too much
+Make sure you start selecting from the // === STORAGE comment line and end exactly at let staff = DEFAULT_STAFF; — not a line before or after.
+
+3. Forgetting Step 4
+The Supabase code won't work if you skipped adding the <script src="...supabase-js..."> tag in Step 4. The supabase.createClient function comes from that script.
+
+add staff button is not working after coonecting to supabase
+
+The issue is that saveStaff() is still the old synchronous version — it tries to call sb.from(...) but the function isn't marked async. Let me fix it properly.
+
+
+Find the saveStaff function
+Find the saveStaff function
+Now I can see the exact problem. The saveStaff and deleteStaff functions are still the old non-Supabase versions. Let me check what storage system is currently in the file:
+
+
+Check which storage system is active
+Check which storage system is active
+The file still has IndexedDB — you haven't connected Supabase yet to this file directly. The saveStaff issue you're hitting is because after following the Step 5 guide, the saveStaff function wasn't updated to be async. Let me fix both — update the file with a complete Supabase-ready version of all the mutation functions with clear placeholder spots for your credentials:
+
+
+Ran 5 commands, read a file
+Ran 5 commands, read a file
+Here's exactly what was wrong and what's fixed:
+
+Root cause: saveStaff() was a regular synchronous function. When Supabase is connected, sb.from(...).insert(...) is async — it returns a Promise. The old function called it but never await-ed it, so it fired and forgot the result, the new staff never got a real database ID, and the modal closed before anything was saved.
+
+What's fixed in this update:
+
+saveStaff() is now async and properly awaits Supabase. It also:
+
+Disables the Save button while saving so you can't double-click
+Shows "Saving…" while the DB call is in flight
+Uses the real DB-generated id from Supabase (not a temp Date.now() id)
+Shows a proper error alert if something goes wrong instead of silently failing
+deleteStaff() now first deletes the staff member's schedule rows (to avoid foreign key errors), then deletes the staff record itself.
+
+saveCondition() and deleteCondition() both updated to be Supabase-aware.
+
+To activate Supabase, open the file in a text editor and find these two lines near the top of the script:
+
+js
+const SUPABASE_URL = 'YOUR_PROJECT_URL';
+const SUPABASE_KEY = 'YOUR_ANON_KEY';
+Paste your values there. Until you do, the app runs in offline mode (IndexedDB) automatically — so it still works without Supabase.
+
+
+Duty scheduler
+Code · HTML 
+Cannot access 'editingStaffId' before initialization
+    at openAddStaff (NEWSCHEDULE/:1186:18)
+    at HTMLButtonElement.onclick (NEWSCHEDULE/:1:1)
+
+The editingStaffId variable is being declared after the functions that use it. Quick fix:
+
+
+Viewed 2 files, ran a command
+Viewed 2 files, ran a command
+The variable is declared with let at line 604 inside the <script> block but the error says it can't be accessed — meaning there's a second <script> block where openAddStaff lives that doesn't have access to the first block's let variable. Let me check:
+
+
+Find all script tags to identify split blocks
+Find all script tags to identify split blocks
+Only one script block — so the issue is that let inside a script block is block-scoped at the module level. The real problem is the let declaration at line 604 comes AFTER the functions at lines 1221+ are hoisted — but since let is not hoisted like var, any function that runs before the let line is evaluated throws this error. The fix is simple: move editingStaffId to the very top of the script as var, or move it before all functions:
+
+
+Ran 3 commands, read a file
+Ran 3 commands, read a file
+Fixed. Here's exactly what caused it and what was done:
+
+The problem — let has a Temporal Dead Zone (TDZ)
+
+js
+// line 1221 — function runs when button clicked
+function openAddStaff() {
+  editingStaffId = null;  // ❌ CRASHES — let hasn't been evaluated yet
+}
+
+// line 604 — let declared here, AFTER the function definition
+let editingStaffId = null;
+With let and const, JavaScript knows the variable exists in the scope but refuses to let you touch it before the line where it's declared — that's the TDZ. Even though openAddStaff is defined at line 1221, when it actually runs (on button click, during page load), the JS engine evaluates the script top-to-bottom. If the let declaration at line 604 hasn't been reached yet at that moment, the crash happens.
+
+The fix — two things done:
+
+Moved all globals to the very top of the <script> block (lines 450–456), before any functions or storage code
+Changed let → var for all globals — var is fully hoisted with its value, so it's always accessible regardless of execution order. No TDZ at all.
+js
+// ✅ Now at line 450 — before everything else
+var editingStaffId = null;
+var staff          = [];
+var config         = { minStaff:2, ... };
+// etc.
+
+Duty scheduler
+Code · HTML 
+
+
+
+
+
+Claude is AI and can make mistakes. Please double-check responses.
+
+
+Duty scheduler · HTML
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -85,14 +298,14 @@ tr:hover td{background:var(--gray-50)}
 .badge-supervisor{background:var(--purple-light);color:var(--purple)}
 .badge-teamlead{background:var(--teal-light);color:var(--teal)}
 .badge-special{background:var(--primary-light);color:var(--primary)}
-
+ 
 /* ---- DUTY TYPE CELLS ---- */
 .duty-straight{background:var(--primary-light);color:var(--primary);border-radius:5px;padding:3px 7px;font-size:11px;font-weight:600;display:inline-block;white-space:nowrap}
 .duty-split{background:var(--coral-light);color:var(--coral);border-radius:5px;padding:3px 7px;font-size:11px;font-weight:600;display:inline-block;white-space:nowrap}
 .duty-off{color:var(--gray-400);font-size:12px;display:inline-block}
 .duty-leave{background:var(--warning-light);color:var(--warning);border-radius:5px;padding:3px 7px;font-size:11px;font-style:italic;display:inline-block}
 .duty-absent{background:var(--danger-light);color:var(--danger);border-radius:5px;padding:3px 7px;font-size:11px;font-style:italic;display:inline-block}
-
+ 
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .form-group{display:flex;flex-direction:column;gap:4px}
 .form-group label{font-size:12px;font-weight:500;color:var(--text-muted)}
@@ -106,14 +319,14 @@ tr:hover td{background:var(--gray-50)}
 .modal-header h3{font-size:15px;font-weight:600}
 .modal-body{padding:20px}
 .modal-footer{padding:12px 20px;border-top:0.5px solid var(--border);display:flex;justify-content:flex-end;gap:8px}
-
+ 
 /* Schedule table */
 .schedule-grid{overflow-x:auto}
 .schedule-table{min-width:760px;width:100%;border-collapse:collapse;font-size:12px}
 .schedule-table th{padding:8px 10px;background:var(--gray-50);border:0.5px solid var(--border);text-align:center;font-size:10px;white-space:nowrap}
 .schedule-table td{padding:6px 8px;border:0.5px solid var(--border);text-align:center;white-space:nowrap}
 .schedule-table td.staff-name{text-align:left;font-weight:500;min-width:140px;background:var(--gray-50);padding:6px 10px}
-
+ 
 /* Day detail */
 .duty-block{background:var(--gray-50);border:0.5px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:10px}
 .duty-block-header{font-size:13px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:8px}
@@ -121,7 +334,7 @@ tr:hover td{background:var(--gray-50)}
 .staff-chip{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-sm);padding:7px 12px;font-size:12px}
 .staff-chip strong{display:block;font-size:13px;font-weight:500}
 .staff-chip span{color:var(--text-muted);font-size:11px}
-
+ 
 .coverage-bar{display:flex;align-items:center;gap:8px;margin:6px 0}
 .coverage-label{font-size:12px;min-width:80px;color:var(--text-muted)}
 .coverage-track{flex:1;height:8px;background:var(--gray-100);border-radius:4px;overflow:hidden}
@@ -178,7 +391,7 @@ tr:hover td{background:var(--gray-50)}
 </head>
 <body>
 <div class="app">
-
+ 
 <!-- SIDEBAR -->
 <aside class="sidebar">
   <div class="sidebar-logo">
@@ -200,7 +413,7 @@ tr:hover td{background:var(--gray-50)}
     <div class="stat-mini"><div class="stat-mini-label">On duty today</div><div class="stat-mini-val" id="sb-onduty">0 <span>assigned</span></div></div>
   </div>
 </aside>
-
+ 
 <!-- MAIN -->
 <div class="main">
   <div class="page-header">
@@ -211,7 +424,7 @@ tr:hover td{background:var(--gray-50)}
     <div id="page-actions" style="display:flex;gap:8px;align-items:center"></div>
   </div>
   <div class="content">
-
+ 
     <!-- DASHBOARD -->
     <div class="page active" id="page-dashboard">
       <div class="stats-grid" id="dash-stats"></div>
@@ -239,7 +452,7 @@ tr:hover td{background:var(--gray-50)}
         </div>
       </div>
     </div>
-
+ 
     <!-- STAFF -->
     <div class="page" id="page-staff">
       <div style="margin-bottom:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -263,7 +476,7 @@ tr:hover td{background:var(--gray-50)}
         </div>
       </div>
     </div>
-
+ 
     <!-- SCHEDULE -->
     <div class="page" id="page-schedule">
       <div id="schedule-alerts" style="margin-bottom:12px"></div>
@@ -302,7 +515,7 @@ tr:hover td{background:var(--gray-50)}
         <div id="daily-detail-content"></div>
       </div>
     </div>
-
+ 
     <!-- RULES -->
     <div class="page" id="page-rules">
       <div class="card">
@@ -354,7 +567,7 @@ tr:hover td{background:var(--gray-50)}
         <div id="custom-conditions-list"></div>
       </div>
     </div>
-
+ 
     <!-- REPORTS -->
     <div class="page" id="page-reports">
       <div class="stats-grid" id="report-stats"></div>
@@ -375,11 +588,11 @@ tr:hover td{background:var(--gray-50)}
         </div>
       </div>
     </div>
-
+ 
   </div>
 </div>
 </div>
-
+ 
 <!-- Modal: Staff -->
 <div class="modal-overlay hidden" id="staff-modal">
   <div class="modal">
@@ -416,7 +629,7 @@ tr:hover td{background:var(--gray-50)}
     </div>
   </div>
 </div>
-
+ 
 <!-- Modal: Condition -->
 <div class="modal-overlay hidden" id="condition-modal">
   <div class="modal">
@@ -442,7 +655,7 @@ tr:hover td{background:var(--gray-50)}
     </div>
   </div>
 </div>
-
+ 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
@@ -454,21 +667,21 @@ var customConditions = [];
 var schedule         = {};
 var currentWeekStart = (function(){ var d=new Date(), day=d.getDay(), diff=day===0?-6:1-day; d.setDate(d.getDate()+diff); return d; })();
 var activeTab        = 'weekly';
-
+ 
 // ===================== STORAGE — Supabase =====================
 // ── PASTE YOUR SUPABASE CREDENTIALS HERE ──────────────────────
 const SUPABASE_URL = 'https://kxfmwacpsxzghsogrgap.supabase.co';   // e.g. https://abcxyz.supabase.co
 const SUPABASE_KEY = 'sb_publishable_PEECl_Y8-YJywpj6htdUFQ_t_ksDCOx';      // starts with eyJ...
 // ──────────────────────────────────────────────────────────────
-
+ 
 // Check credentials are set
 const SUPABASE_READY = SUPABASE_URL !== 'YOUR_PROJECT_URL' && SUPABASE_KEY !== 'YOUR_ANON_KEY';
 const sb = SUPABASE_READY ? supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
-
+ 
 if (!SUPABASE_READY) {
   console.warn('⚠ Supabase credentials not set — running in offline mode (IndexedDB).');
 }
-
+ 
 // ── IndexedDB fallback (used when Supabase not configured) ──
 const DB_NAME = 'DutyPlanDB', DB_VERSION = 1, DB_STORE = 'appdata';
 let _db = null;
@@ -485,7 +698,7 @@ function idbGet(key) { return openDB().then(db => new Promise(res => { const r=d
 function idbSet(key, val) { return openDB().then(db => new Promise(res => { const r=db.transaction(DB_STORE,'readwrite').objectStore(DB_STORE).put(val,key); r.onsuccess=()=>res(); r.onerror=()=>res(); })); }
 function lsGet(key) { try{ const v=localStorage.getItem(key); return v?JSON.parse(v):null; }catch(e){return null;} }
 function lsSet(key,val) { try{ localStorage.setItem(key,JSON.stringify(val)); }catch(e){} }
-
+ 
 // ── Column name remappers (Supabase snake_case ↔ app camelCase) ──
 function remapStaff(r) {
   return { id:r.id, name:r.name, empId:r.emp_id, dept:r.dept||'Reception',
@@ -494,7 +707,7 @@ function remapStaff(r) {
 function remapConfig(r) {
   return { minStaff:r.min_staff||2, maxDays:r.max_days||5, rotation:r.rotation||4, splitRatio:r.split_ratio||3 };
 }
-
+ 
 // ── Load all data ──
 async function loadAllData() {
   if (SUPABASE_READY) {
@@ -511,16 +724,16 @@ async function loadAllData() {
       sb.from('conditions').select('*').order('id'),
       sb.from('schedule').select('*')
     ]);
-
+ 
     if (e1) console.warn('Staff load error:', e1.message);
-
+ 
     // Reshape schedule rows → { 'YYYY-MM-DD': { staffId: dutyType } }
     const scheduleMap = {};
     (schedData||[]).forEach(row => {
       if (!scheduleMap[row.date]) scheduleMap[row.date] = {};
       scheduleMap[row.date][row.staff_id] = row.duty_type;
     });
-
+ 
     return {
       staff:            (staffData||[]).map(remapStaff),
       config:           configData ? remapConfig(configData) : null,
@@ -539,7 +752,7 @@ async function loadAllData() {
     return d;
   }
 }
-
+ 
 // ── Save everything ──
 async function persistAll() {
   showSaveFlash('Saving…');
@@ -552,16 +765,16 @@ async function persistAll() {
         desig:s.desig, status:s.status, role:s.role||'', notes:s.notes||''
       }));
       await sb.from('staff').upsert(staffRows);
-
+ 
       await sb.from('app_config').upsert({
         id:1, min_staff:config.minStaff, max_days:config.maxDays,
         rotation:config.rotation, split_ratio:config.splitRatio
       });
-
+ 
       if (customConditions.length > 0) {
         await sb.from('conditions').upsert(customConditions);
       }
-
+ 
       const schedRows = [];
       Object.entries(schedule).forEach(([date, dayMap]) => {
         Object.entries(dayMap).forEach(([staffId, dutyType]) => {
@@ -571,7 +784,7 @@ async function persistAll() {
       if (schedRows.length > 0) {
         await sb.from('schedule').upsert(schedRows, { onConflict:'date,staff_id' });
       }
-
+ 
       showSaveFlash('✓ Saved to Supabase');
     } else {
       // Fallback: IndexedDB + localStorage
@@ -590,7 +803,7 @@ async function persistAll() {
     showSaveFlash('⚠ Save failed — check console');
   }
 }
-
+ 
 // ── Toast notification ──
 function showSaveFlash(msg) {
   let el = document.getElementById('save-flash');
@@ -607,10 +820,10 @@ function showSaveFlash(msg) {
     el._t = setTimeout(()=>{ el.style.opacity='0'; }, 2500);
   }
 }
-
+ 
 // ===================== DATA =====================
 // (declared at top)
-
+ 
 /*
   DUTY TYPES:
   - 'straight-morning'   07:00–15:30  (8.5h)
@@ -628,17 +841,17 @@ function showSaveFlash(msg) {
   │  08:00–22:30   → PEAK zone  (multiple staff)        │
   │  22:30–00:00   → SOLO zone  (1 person only)         │
   └─────────────────────────────────────────────────────┘
-
+ 
   STRAIGHT SHIFTS (8h 30m each):
     STR-OPEN   07:00–15:30  covers solo open + peak morning
     STR-MID    09:00–17:30  peak only
     STR-AFT    13:00–21:30  peak + early close
     STR-CLOSE  15:30–00:00  covers peak afternoon + solo close
-
+ 
   SPLIT DUTY:
     AM block   07:00–12:00  (covers solo open + peak morning)
     PM block   19:00–00:00  (covers peak evening + solo close)
-
+ 
   SOLO COVERAGE RULE:
     • STR-OPEN  staff member is ALWAYS the solo opener (07:00–08:00)
     • STR-CLOSE staff member is ALWAYS the solo closer (22:30–00:00)
@@ -653,12 +866,12 @@ const STRAIGHT_SHIFTS = [
   {key:'straight-close', label:'Straight — Close',   short:'STR-C', time:'15:30–00:00', color:'blue',   solo:'close'},
 ];
 const SPLIT = {key:'split', label:'Split duty', short:'SPLIT', time:'07:00–12:00 & 19:00–00:00', color:'coral'};
-
+ 
 const DAYS  = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const DSHRT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-
+ 
 // (declared at top)
-
+ 
 let rules = [
   {id:1,title:'Leave & absent staff excluded',desc:'Employees on leave or absent are not scheduled for any duty.',icon:'ti-calendar-off',enabled:true},
   {id:2,title:'Exactly one day off per available staff per day',desc:'Each day exactly one available staff member is given a day off, rotating fairly across the week.',icon:'ti-moon',enabled:true},
@@ -669,21 +882,21 @@ let rules = [
   {id:7,title:'Minimum staffing maintained',desc:'At least the configured minimum number of staff are on duty at all times.',icon:'ti-users',enabled:true},
   {id:8,title:'Max consecutive duty days',desc:'No staff member is scheduled for more than the maximum configured consecutive days.',icon:'ti-calendar-stats',enabled:true},
 ];
-
+ 
 // (declared at top)
 // (declared at top)
-
+ 
 // (rule states restored in async init below)
 // (declared at top)
 // (declared at top)
-
+ 
 // ===================== SCHEDULE GENERATION =====================
 /*
   COVERAGE ZONES PER DAY:
     07:00–08:00  SOLO-OPEN  → exactly 1 staff (STR-OPEN or Split-AM person)
     08:00–22:30  PEAK       → multiple staff (STR-MID, STR-AFT, STR-OPEN tail, STR-CLOSE start, Split both blocks)
     22:30–00:00  SOLO-CLOSE → exactly 1 staff (STR-CLOSE or Split-PM person)
-
+ 
   ASSIGNMENT PRIORITY:
     1. Pick 1 staff as day-off (rotating fair)
     2. Assign 1 SOLO-OPEN staff  → STR-OPEN  (07:00–15:30)
@@ -697,7 +910,7 @@ function generateSchedule() {
   const weekNum   = getWeekNumber(currentWeekStart);
   const available = staff.filter(s => s.status === 'Available');
   if (!available.length) return;
-
+ 
   // Weekly fairness counters
   const counters = {};
   available.forEach(s => {
@@ -706,19 +919,19 @@ function generateSchedule() {
       'straight-open':0, 'straight-mid':0, 'straight-aft':0, 'straight-close':0
     };
   });
-
+ 
   weekDates.forEach((date, dayIdx) => {
     const ds = formatDate(date);
     schedule[ds] = {};
-
+ 
     // Step 1: mark leave / absent
     staff.forEach(s => {
       if (s.status === 'Leave')        schedule[ds][s.id] = 'leave';
       else if (s.status === 'Absent')  schedule[ds][s.id] = 'absent';
     });
-
+ 
     if (!available.length) return;
-
+ 
     // Step 2: exactly ONE day-off (rotate fairly)
     const offPool = [...available].sort((a, b) => {
       if (counters[a.id].off !== counters[b.id].off) return counters[a.id].off - counters[b.id].off;
@@ -728,11 +941,11 @@ function generateSchedule() {
     const offStaff = offPool[0];
     schedule[ds][offStaff.id] = 'off';
     counters[offStaff.id].off++;
-
+ 
     // Duty pool = available minus day-off person
     let pool = available.filter(s => !schedule[ds][s.id]);
     if (!pool.length) return;
-
+ 
     // Helper: pick from pool by lowest count of a key, with rotation tie-break
     function pickOne(pool, countKey, seed) {
       return [...pool].sort((a, b) => {
@@ -742,7 +955,7 @@ function generateSchedule() {
                ((available.indexOf(b) + seed) % available.length);
       })[0];
     }
-
+ 
     // Step 3: assign SOLO-OPEN person → STR-OPEN (07:00–15:30)
     // Prefer non-supervisor for solo open so supervisor covers peak; rotate fairly
     const nonSup = pool.filter(s => s.role !== 'Supervisor' && s.role !== 'Team Leader');
@@ -752,12 +965,12 @@ function generateSchedule() {
     counters[openPerson.id]['straight-open']++;
     counters[openPerson.id].straight++;
     pool = pool.filter(s => s.id !== openPerson.id);
-
+ 
     if (!pool.length) return;
-
+ 
     // Step 4: decide how many get SPLIT duty from remaining pool
     const nSplit = Math.max(0, Math.round(pool.length * config.splitRatio / 10));
-
+ 
     // Prefer non-sup for split; sort by fewest splits
     const splitCandidates = [...pool].sort((a, b) => {
       const diff = counters[a.id].split - counters[b.id].split;
@@ -767,7 +980,7 @@ function generateSchedule() {
       return aPri - bPri;
     });
     const splitSet = new Set(splitCandidates.slice(0, nSplit).map(s => s.id));
-
+ 
     // Assign split duty
     pool.forEach(s => {
       if (splitSet.has(s.id)) {
@@ -775,11 +988,11 @@ function generateSchedule() {
         counters[s.id].split++;
       }
     });
-
+ 
     // Step 5: remaining straight pool
     let straightPool = pool.filter(s => !splitSet.has(s.id));
     if (!straightPool.length) return;
-
+ 
     // Step 6: assign SOLO-CLOSE person → STR-CLOSE (15:30–00:00)
     // Only 1 person covers 22:30–00:00. Pick from straight pool with fewest close shifts.
     // If split staff exists, split-PM already covers close — so close is covered; still assign STR-CLOSE for 15:30 handover.
@@ -788,13 +1001,13 @@ function generateSchedule() {
     counters[closePerson.id]['straight-close']++;
     counters[closePerson.id].straight++;
     straightPool = straightPool.filter(s => s.id !== closePerson.id);
-
+ 
     // Step 7: fill remaining straight pool with STR-MID / STR-AFT (peak only)
     // Rotate between mid and aft fairly; supervisors prefer mid for peak visibility
     const peakShifts = ['straight-mid', 'straight-aft'];
     const supervisorsLeft = straightPool.filter(s => s.role === 'Supervisor' || s.role === 'Team Leader');
     const othersLeft      = straightPool.filter(s => s.role !== 'Supervisor' && s.role !== 'Team Leader');
-
+ 
     // Supervisors → STR-MID (peak oversight)
     supervisorsLeft.forEach((s, i) => {
       const shift = peakShifts[i % 2]; // alternate if multiple supervisors
@@ -802,7 +1015,7 @@ function generateSchedule() {
       counters[s.id][shift]++;
       counters[s.id].straight++;
     });
-
+ 
     // Others → alternate STR-MID / STR-AFT by rotation
     othersLeft.forEach((s, i) => {
       const shiftIdx = ((i + dayIdx + weekNum) % 2);
@@ -813,7 +1026,7 @@ function generateSchedule() {
     });
   });
 }
-
+ 
 // ===================== DUTY DISPLAY HELPERS =====================
 function dutyLabel(val) {
   if (!val) return '—';
@@ -828,7 +1041,7 @@ function dutyLabel(val) {
   }
   return val;
 }
-
+ 
 function dutyShortCell(val) {
   if (!val) return `<td>—</td>`;
   if (val === 'off')    return `<td><span class="duty-off" style="font-size:11px">Off</span></td>`;
@@ -841,19 +1054,19 @@ function dutyShortCell(val) {
   if (val === 'straight-close') return `<td><span class="duty-straight" style="background:var(--purple-light);color:var(--purple)" title="15:30–00:00 · Solo close 22:30-00">STR-C</span></td>`;
   return `<td>${val}</td>`;
 }
-
+ 
 function dutyHours(val) {
   if (['off','leave','absent',undefined,null,''].includes(val)) return '—';
   if (val === 'split') return '10h (split)';
   return '8h 30m';
 }
-
+ 
 function dutyTime(val) {
   if (val === 'split') return '07:00–12:00 & 19:00–00:00';
   const sh = STRAIGHT_SHIFTS.find(x => x.key === val);
   return sh ? sh.time : '';
 }
-
+ 
 // ===================== ALERTS =====================
 function getScheduleAlerts() {
   const alerts = [];
@@ -877,7 +1090,7 @@ function getScheduleAlerts() {
   if (closeCount === 0) alerts.push({type:'danger', msg:'Solo close zone (22:30–00:00) has no staff assigned.'});
   return alerts;
 }
-
+ 
 // ===================== RENDER: DASHBOARD =====================
 function renderDashboard() {
   const avail   = staff.filter(s => s.status === 'Available');
@@ -886,22 +1099,22 @@ function renderDashboard() {
   const todayStr = formatDate(new Date());
   const todaySch = schedule[todayStr] || {};
   const onDuty   = Object.values(todaySch).filter(v => v && v !== 'off' && v !== 'leave' && v !== 'absent').length;
-
+ 
   document.getElementById('sb-available').innerHTML = `${avail.length} <span>staff</span>`;
   document.getElementById('sb-onduty').innerHTML    = `${onDuty} <span>assigned</span>`;
-
+ 
   document.getElementById('dash-stats').innerHTML = `
     <div class="stat-card blue"><div class="stat-label">Total staff</div><div class="stat-val">${staff.length}</div><div class="stat-sub">registered</div></div>
     <div class="stat-card green"><div class="stat-label">Available</div><div class="stat-val">${avail.length}</div><div class="stat-sub">ready to schedule</div></div>
     <div class="stat-card amber"><div class="stat-label">On leave</div><div class="stat-val">${onLeave.length}</div><div class="stat-sub">excluded</div></div>
     <div class="stat-card red"><div class="stat-label">Absent</div><div class="stat-val">${absent.length}</div><div class="stat-sub">unscheduled</div></div>
   `;
-
+ 
   const alerts = getScheduleAlerts();
   document.getElementById('dash-alerts').innerHTML = alerts.map(a => `
     <div class="alert alert-${a.type}"><span class="svg-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span></i><span>${a.msg}</span></div>
   `).join('');
-
+ 
   // Coverage breakdown
   const straight  = Object.values(todaySch).filter(v => v && v.startsWith('straight-')).length;
   const split     = Object.values(todaySch).filter(v => v === 'split').length;
@@ -929,7 +1142,7 @@ function renderDashboard() {
   });
   const maxCount = Math.max(...Object.values(hourCounts), 1);
   const SOLO_HOURS = [7, 23]; // hours where only 1 person required
-
+ 
   const barHTML = HOURS.map((h, i) => {
     const count = hourCounts[h];
     const isSolo = SOLO_HOURS.includes(h);
@@ -945,7 +1158,7 @@ function renderDashboard() {
       <div style="font-size:9px;color:var(--text-muted);white-space:nowrap">'+HOUR_LABELS[i]+'</div>
     </div>`;
   }).join('');
-
+ 
   document.getElementById('dash-coverage').innerHTML =
     `<div style="display:flex;gap:1px;align-items:flex-end;margin-bottom:4px">${barHTML}</div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;font-size:11px;margin-top:6px">
@@ -962,7 +1175,7 @@ function renderDashboard() {
         22:30–00:00 solo: ${soloClose>=1?'✓ Covered':'⚠ Not covered'}
       </div>
     </div>`;
-
+ 
   // Avail breakdown
   document.getElementById('dash-avail-chart').innerHTML = [
     {label:'Available',count:avail.length,  color:'var(--success)'},
@@ -975,7 +1188,7 @@ function renderDashboard() {
       <div class="coverage-count">${item.count}</div>
     </div>
   `).join('') + `<div style="font-size:11px;color:var(--text-muted);margin-top:8px">Total: ${staff.length} employees</div>`;
-
+ 
   // Today's table
   document.getElementById('dash-today-table').innerHTML = staff.map(s => {
     const val  = todaySch[s.id];
@@ -989,7 +1202,7 @@ function renderDashboard() {
     </tr>`;
   }).join('') || `<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted)">Generate a schedule to see today's assignments.</td></tr>`;
 }
-
+ 
 // ===================== RENDER: STAFF TABLE =====================
 function renderStaffTable() {
   const q = document.getElementById('staff-search').value.toLowerCase();
@@ -1018,7 +1231,7 @@ function renderStaffTable() {
     </tr>`;
   }).join('');
 }
-
+ 
 // ===================== RENDER: WEEKLY TABLE =====================
 function renderWeeklyTable() {
   const dates = getWeekDates(currentWeekStart);
@@ -1036,7 +1249,7 @@ function renderWeeklyTable() {
   html += '</tbody>';
   document.getElementById('weekly-table').innerHTML = html;
 }
-
+ 
 // ===================== RENDER: DAY SELECT =====================
 function renderDaySelect() {
   const dates = getWeekDates(currentWeekStart);
@@ -1045,14 +1258,14 @@ function renderDaySelect() {
     return `<option value="${ds}">${DAYS[d.getDay()]} ${d.getDate()}/${d.getMonth()+1}${ds===formatDate(new Date())?' (today)':''}</option>`;
   }).join('');
 }
-
+ 
 // ===================== RENDER: DAILY DETAIL =====================
 function renderDailyDetail() {
   const ds = document.getElementById('day-select')?.value;
   if (!ds) return;
   const daySch = schedule[ds] || {};
   const d = new Date(ds + 'T00:00:00');
-
+ 
   // Group staff by duty type
   const groups = {
     'straight-open':  {label:'Straight — Open',  time:'07:00–15:30  ·  Solo zone: 07:00–08:00', color:'#7A5C00',        bg:'#FFF9E6'},
@@ -1064,12 +1277,12 @@ function renderDailyDetail() {
     'leave':          {label:'On leave',          time:'—',                                       color:'var(--warning)', bg:'var(--warning-light)'},
     'absent':         {label:'Absent',            time:'—',                                       color:'var(--danger)',  bg:'var(--danger-light)'},
   };
-
+ 
   let html = `<div class="card">
     <div class="card-header">
       <span class="card-title">${DAYS[d.getDay()]}, ${d.getDate()} ${d.toLocaleString('default',{month:'long'})} ${d.getFullYear()}</span>
     </div>`;
-
+ 
   // Summary row
   const onDuty    = staff.filter(s => daySch[s.id] && daySch[s.id] !== 'off' && daySch[s.id] !== 'leave' && daySch[s.id] !== 'absent');
   const offStf    = staff.filter(s => daySch[s.id] === 'off');
@@ -1094,7 +1307,7 @@ function renderDailyDetail() {
       </span>
     </div>
   </div>`;
-
+ 
   const groupOrder = ['straight-open','straight-mid','straight-aft','straight-close','split','off','leave','absent'];
   groupOrder.forEach(key => {
     const members = staff.filter(s => daySch[s.id] === key);
@@ -1114,11 +1327,11 @@ function renderDailyDetail() {
     });
     html += `</div></div>`;
   });
-
+ 
   html += '</div>';
   document.getElementById('daily-detail-content').innerHTML = html;
 }
-
+ 
 // ===================== RENDER: RULES =====================
 function renderRules() {
   document.getElementById('rules-list').innerHTML = rules.map(r => `
@@ -1128,7 +1341,7 @@ function renderRules() {
       <label class="toggle"><input type="checkbox" ${r.enabled?'checked':''} onchange="toggleRule(${r.id})"><span class="toggle-slider"></span></label>
     </div>
   `).join('');
-
+ 
   const cl = document.getElementById('custom-conditions-list');
   if (!customConditions.length) {
     cl.innerHTML = `<div style="padding:16px 0;text-align:center;color:var(--text-muted);font-size:13px"><span class="svg-icon" aria-hidden="true" style="font-size:20px;display:block;margin-bottom:6px;opacity:.4"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span></i>No custom conditions yet.</div>`;
@@ -1145,13 +1358,13 @@ function renderRules() {
     `).join('');
   }
 }
-
+ 
 // ===================== RENDER: REPORTS =====================
 function renderReports() {
   const weekDates = getWeekDates(currentWeekStart);
   const counts = {};
   staff.forEach(s => { counts[s.id] = {straight:0, split:0, off:0, leave:0, absent:0}; });
-
+ 
   weekDates.forEach(d => {
     const ds = formatDate(d);
     const ds2 = schedule[ds] || {};
@@ -1165,19 +1378,19 @@ function renderReports() {
       else if (v === 'absent')  counts[s.id].absent++;
     });
   });
-
+ 
   const totalStr   = Object.values(counts).reduce((a,c) => a+c.straight, 0);
   const totalSplit = Object.values(counts).reduce((a,c) => a+c.split,    0);
   const totalDuty  = totalStr + totalSplit;
   const totalOff   = Object.values(counts).reduce((a,c) => a+c.off,      0);
-
+ 
   document.getElementById('report-stats').innerHTML = `
     <div class="stat-card blue"><div class="stat-label">Total duty days</div><div class="stat-val">${totalDuty}</div><div class="stat-sub">this week</div></div>
     <div class="stat-card"><div class="stat-label">Straight duty</div><div class="stat-val" style="color:var(--primary)">${totalStr}</div></div>
     <div class="stat-card"><div class="stat-label">Split duty</div><div class="stat-val" style="color:var(--coral)">${totalSplit}</div></div>
     <div class="stat-card amber"><div class="stat-label">Days off given</div><div class="stat-val">${totalOff}</div></div>
   `;
-
+ 
   // Workload chart
   const max = Math.max(...staff.map(s => counts[s.id].straight + counts[s.id].split), 1);
   document.getElementById('workload-chart').innerHTML = staff.map(s => {
@@ -1193,7 +1406,7 @@ function renderReports() {
       <div style="font-size:12px;font-weight:500;min-width:16px;text-align:right">${total}</div>
     </div>`;
   }).join('') + `<div style="display:flex;gap:10px;margin-top:6px;font-size:11px"><span style="color:var(--primary)">■ Straight</span><span style="color:var(--coral)">■ Split</span></div>`;
-
+ 
   // Duty type breakdown
   const d = [
     {label:'Straight duty', val:totalStr,   color:'var(--primary)'},
@@ -1208,7 +1421,7 @@ function renderReports() {
       <div style="font-size:13px;font-weight:600;color:${item.color};min-width:24px;text-align:right">${item.val}</div>
     </div>
   `).join('');
-
+ 
   // Duty log table
   document.getElementById('report-table').innerHTML = staff.map(s => {
     const c = counts[s.id];
@@ -1224,7 +1437,7 @@ function renderReports() {
     </tr>`;
   }).join('');
 }
-
+ 
 // ===================== STAFF CRUD =====================
 function openAddStaff() {
   editingStaffId = null;
@@ -1252,11 +1465,11 @@ async function saveStaff() {
   const name  = document.getElementById('sf-name').value.trim();
   const empId = document.getElementById('sf-id').value.trim();
   if (!name || !empId) { alert('Name and Employee ID are required.'); return; }
-
+ 
   // Disable save button to prevent double-clicks
   const saveBtn = document.querySelector('#staff-modal .btn-primary');
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
-
+ 
   const data = {
     name, empId,
     dept:   document.getElementById('sf-dept').value.trim() || 'Reception',
@@ -1265,7 +1478,7 @@ async function saveStaff() {
     role:   document.getElementById('sf-role').value,
     notes:  document.getElementById('sf-notes').value.trim(),
   };
-
+ 
   try {
     if (SUPABASE_READY) {
       if (editingStaffId) {
@@ -1320,7 +1533,7 @@ async function saveStaff() {
       saveBtn.innerHTML = '<span class="svg-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Save';
     }
   }
-
+ 
   closeModal('staff-modal');
   renderStaffTable();
   renderDashboard();
@@ -1354,7 +1567,7 @@ function deleteStaff(id) {
     }
   };
 }
-
+ 
 // ===================== RULES =====================
 function toggleRule(id) { const r=rules.find(x=>x.id===id); if(r){ r.enabled=!r.enabled; persistAll(); } }
 function openAddCondition() {
@@ -1423,7 +1636,7 @@ function applyRules(){
   renderReports();
   alert('Settings applied and schedule regenerated.');
 }
-
+ 
 // ===================== NAV =====================
 function showPage(page) {
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
@@ -1450,9 +1663,9 @@ function showPage(page) {
   if(page==='reports')   renderReports();
   if(page==='dashboard') renderDashboard();
 }
-
+ 
 function closeModal(id){ document.getElementById(id).classList.add('hidden'); }
-
+ 
 function switchTab(tab,el){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   el.classList.add('active');
@@ -1461,7 +1674,7 @@ function switchTab(tab,el){
   document.getElementById('tab-daily').style.display  = tab==='daily' ?'':'none';
   if(tab==='daily') renderDailyDetail();
 }
-
+ 
 function renderSchedule(){
   currentWeekStart=new Date(document.getElementById('week-start').value+'T00:00:00');
   generateSchedule();
@@ -1474,12 +1687,12 @@ function renderSchedule(){
   renderDashboard();
   renderReports();
 }
-
+ 
 function prevWeek(){ currentWeekStart=new Date(currentWeekStart); currentWeekStart.setDate(currentWeekStart.getDate()-7); document.getElementById('week-start').value=formatDate(currentWeekStart); renderSchedule(); }
 function nextWeek(){ currentWeekStart=new Date(currentWeekStart); currentWeekStart.setDate(currentWeekStart.getDate()+7); document.getElementById('week-start').value=formatDate(currentWeekStart); renderSchedule(); }
-
+ 
 function refreshAll(){ generateSchedule(); renderStaffTable(); renderDashboard(); renderReports(); if(activeTab==='weekly') renderWeeklyTable(); else renderDailyDetail(); }
-
+ 
 function dutyLabel_excel(val){
   if(!val||val==='off') return 'Day Off';
   if(val==='leave') return 'Leave';
@@ -1491,26 +1704,26 @@ function dutyLabel_excel(val){
   if(val==='straight-close') return 'STR-C (15:30-00:00)';
   return val;
 }
-
+ 
 function exportReport(){
   if(typeof XLSX === 'undefined'){ alert('Excel library not loaded yet. Please wait a moment and try again.'); return; }
-
+ 
   const wb = XLSX.utils.book_new();
   const weekDates = getWeekDates(currentWeekStart);
   const DAYS_FULL = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-
+ 
   // ── SHEET 1: Weekly Schedule Grid ──
   const dateHeaders = weekDates.map(d => DAYS_FULL[d.getDay()] + ' ' + d.getDate() + '/' + (d.getMonth()+1));
   const ws1_data = [];
-
+ 
   // Title row
   const weekLabel = 'Week of ' + weekDates[0].getDate() + '/' + (weekDates[0].getMonth()+1) + '/' + weekDates[0].getFullYear();
   ws1_data.push(['RECEPTION DUTY SCHEDULE — ' + weekLabel, '', '', '', '', '', '', '', '']);
   ws1_data.push(['']); // blank row
-
+ 
   // Header row
   ws1_data.push(['Employee Name', 'ID', 'Designation', 'Role', ...dateHeaders, 'Total Duty Days']);
-
+ 
   // Data rows
   staff.forEach(s => {
     const row = [s.name, s.empId, s.desig, s.role || 'Staff'];
@@ -1524,7 +1737,7 @@ function exportReport(){
     row.push(dutyCount);
     ws1_data.push(row);
   });
-
+ 
   // Blank + legend rows
   ws1_data.push(['']);
   ws1_data.push(['LEGEND']);
@@ -1534,34 +1747,34 @@ function exportReport(){
   ws1_data.push(['STR-C', '15:30–00:00', 'Close shift (solo closer 22:30–00)']);
   ws1_data.push(['Split', '07–12 & 19–00', 'Split duty — two sessions']);
   ws1_data.push(['Solo zones:', '07:00–08:00 and 22:30–00:00 require exactly 1 person']);
-
+ 
   const ws1 = XLSX.utils.aoa_to_sheet(ws1_data);
-
+ 
   // Column widths
   ws1['!cols'] = [
     {wch:24},{wch:10},{wch:22},{wch:14},
     {wch:22},{wch:22},{wch:22},{wch:22},{wch:22},{wch:22},{wch:22},
     {wch:14}
   ];
-
+ 
   // Merge title cell across all columns
   ws1['!merges'] = [{s:{r:0,c:0}, e:{r:0,c:11}}];
-
+ 
   XLSX.utils.book_append_sheet(wb, ws1, 'Weekly Schedule');
-
+ 
   // ── SHEET 2: Daily Shift Detail ──
   const ws2_data = [];
   ws2_data.push(['DAILY SHIFT DETAIL — ' + weekLabel]);
   ws2_data.push(['']);
-
+ 
   weekDates.forEach(d => {
     const ds = formatDate(d);
     const daySch = schedule[ds] || {};
     const dayName = DAYS_FULL[d.getDay()] + ', ' + d.getDate() + '/' + (d.getMonth()+1) + '/' + d.getFullYear();
-
+ 
     ws2_data.push([dayName]);
     ws2_data.push(['Shift', 'Time', 'Employee', 'ID', 'Designation', 'Role', 'Hours']);
-
+ 
     const SHIFT_DETAILS = {
       'straight-open':  ['STR-O', '07:00–15:30', '8h 30m'],
       'straight-mid':   ['STR-M', '09:00–17:30', '8h 30m'],
@@ -1569,7 +1782,7 @@ function exportReport(){
       'straight-close': ['STR-C', '15:30–00:00', '8h 30m'],
       'split':          ['Split', '07:00–12:00 & 19:00–00:00', '10h (with break)'],
     };
-
+ 
     const shiftOrder = ['straight-open','straight-mid','straight-aft','straight-close','split'];
     shiftOrder.forEach(sk => {
       const assigned = staff.filter(s => daySch[s.id] === sk);
@@ -1578,7 +1791,7 @@ function exportReport(){
         ws2_data.push([sd[0], sd[1], s.name, s.empId, s.desig, s.role||'Staff', sd[2]]);
       });
     });
-
+ 
     // Off/Leave/Absent
     const offRow  = staff.filter(s => daySch[s.id] === 'off').map(s => s.name).join(', ');
     const leaveRow = staff.filter(s => daySch[s.id] === 'leave').map(s => s.name).join(', ');
@@ -1586,15 +1799,15 @@ function exportReport(){
     if(offRow)    ws2_data.push(['Day Off', '', offRow]);
     if(leaveRow)  ws2_data.push(['Leave', '', leaveRow]);
     if(absentRow) ws2_data.push(['Absent', '', absentRow]);
-
+ 
     ws2_data.push(['']); // spacer
   });
-
+ 
   const ws2 = XLSX.utils.aoa_to_sheet(ws2_data);
   ws2['!cols'] = [{wch:12},{wch:26},{wch:24},{wch:10},{wch:22},{wch:14},{wch:18}];
   ws2['!merges'] = [{s:{r:0,c:0},e:{r:0,c:6}}];
   XLSX.utils.book_append_sheet(wb, ws2, 'Daily Detail');
-
+ 
   // ── SHEET 3: Staff Summary Report ──
   const counts = {};
   staff.forEach(s => { counts[s.id] = {straight:0, split:0, off:0, leave:0, absent:0}; });
@@ -1607,12 +1820,12 @@ function exportReport(){
       else if(counts[s.id][v] !== undefined) counts[s.id][v]++;
     });
   });
-
+ 
   const ws3_data = [];
   ws3_data.push(['STAFF DUTY SUMMARY — ' + weekLabel]);
   ws3_data.push(['']);
   ws3_data.push(['Name','Employee ID','Department','Designation','Role','Status','Straight Days','Split Days','Total Duty Days','Days Off','Leave','Absent','Total Scheduled Hours']);
-
+ 
   staff.forEach(s => {
     const c = counts[s.id];
     const totalHours = (c.straight * 8.5) + (c.split * 10);
@@ -1622,7 +1835,7 @@ function exportReport(){
       totalHours + 'h'
     ]);
   });
-
+ 
   // Totals row
   const totals = staff.reduce((acc, s) => {
     const c = counts[s.id];
@@ -1631,26 +1844,26 @@ function exportReport(){
     return acc;
   }, {straight:0,split:0,off:0,leave:0,absent:0});
   ws3_data.push(['TOTALS','','','','','',totals.straight,totals.split,totals.straight+totals.split,totals.off,totals.leave,totals.absent,((totals.straight*8.5)+(totals.split*10))+'h']);
-
+ 
   const ws3 = XLSX.utils.aoa_to_sheet(ws3_data);
   ws3['!cols'] = [{wch:24},{wch:12},{wch:14},{wch:22},{wch:14},{wch:12},{wch:14},{wch:12},{wch:16},{wch:10},{wch:8},{wch:8},{wch:18}];
   ws3['!merges'] = [{s:{r:0,c:0},e:{r:0,c:12}}];
   XLSX.utils.book_append_sheet(wb, ws3, 'Staff Summary');
-
+ 
   // ── Download ──
   const fname = 'duty-schedule-' + formatDate(weekDates[0]) + '.xlsx';
   XLSX.writeFile(wb, fname);
 }
-
+ 
 // ===================== UTILS =====================
 function formatDate(d){ return d.toISOString().slice(0,10); }
 function getMonday(d){ const dt=new Date(d), day=dt.getDay(), diff=day===0?-6:1-day; dt.setDate(dt.getDate()+diff); return dt; }
 function getWeekDates(monday){ return Array.from({length:7},(_,i)=>{ const d=new Date(monday); d.setDate(d.getDate()+i); return d; }); }
 function getWeekNumber(d){ const dt=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())); dt.setUTCDate(dt.getUTCDate()+4-(dt.getUTCDay()||7)); const y=new Date(Date.UTC(dt.getUTCFullYear(),0,1)); return Math.ceil((((dt-y)/86400000)+1)/7); }
-
+ 
 // ===================== INIT =====================
 window.addEventListener('click', e=>{ if(e.target.classList.contains('modal-overlay')) e.target.classList.add('hidden'); });
-
+ 
 // Show loading overlay while data loads
 document.body.insertAdjacentHTML('beforeend',
   '<div id="app-loading" style="position:fixed;inset:0;background:rgba(247,246,243,.92);z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px">'
@@ -1659,32 +1872,32 @@ document.body.insertAdjacentHTML('beforeend',
   + '<style>@keyframes spin{to{transform:rotate(360deg)}}</style>'
   + '</div>'
 );
-
+ 
 // Async startup: load from IndexedDB/localStorage then render
 (async function init() {
   try {
     const saved = await loadAllData();
-
+ 
     // Restore staff
     if (saved.staff && saved.staff.length > 0) {
       staff = saved.staff;
     }
-
+ 
     // Restore config
     if (saved.config) {
       config = saved.config;
     }
-
+ 
     // Restore conditions
     if (saved.customConditions) {
       customConditions = saved.customConditions;
     }
-
+ 
     // Restore schedule
     if (saved.schedule && Object.keys(saved.schedule).length > 0) {
       schedule = saved.schedule;
     }
-
+ 
     // Restore rule states
     if (saved.ruleStates && saved.ruleStates.length > 0) {
       saved.ruleStates.forEach(sr => {
@@ -1692,7 +1905,7 @@ document.body.insertAdjacentHTML('beforeend',
         if (r) r.enabled = sr.enabled;
       });
     }
-
+ 
     // Set week start
     const scheduleKeys = Object.keys(schedule);
     if (scheduleKeys.length === 0) {
@@ -1703,27 +1916,27 @@ document.body.insertAdjacentHTML('beforeend',
       currentWeekStart = getMonday(new Date(latestDate + 'T00:00:00'));
     }
     document.getElementById('week-start').value = formatDate(currentWeekStart);
-
+ 
     // Restore config UI fields
     document.getElementById('cfg-min-staff').value   = config.minStaff;
     document.getElementById('cfg-max-days').value    = config.maxDays;
     document.getElementById('cfg-rotation').value    = config.rotation;
     document.getElementById('cfg-split-ratio').value = config.splitRatio;
-
+ 
   } catch(err) {
     console.warn('Storage load failed, using defaults:', err);
     generateSchedule();
   }
-
+ 
   // Remove loading overlay and render
   const overlay = document.getElementById('app-loading');
   if (overlay) overlay.remove();
-
+ 
   renderDashboard();
   renderStaffTable();
 })();
 </script>
-
+ 
 <!-- Confirm delete modal -->
 <div class="modal-overlay hidden" id="confirm-modal">
   <div class="modal" style="max-width:400px">
@@ -1742,3 +1955,4 @@ document.body.insertAdjacentHTML('beforeend',
 </div>
 </body>
 </html>
+ 
