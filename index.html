@@ -446,6 +446,15 @@ tr:hover td{background:var(--gray-50)}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
+// ===================== GLOBAL STATE — declared first so all functions can access =====================
+var editingStaffId   = null;   // var = hoisted, no TDZ issues
+var staff            = [];
+var config           = {minStaff:2, maxDays:5, rotation:4, splitRatio:3};
+var customConditions = [];
+var schedule         = {};
+var currentWeekStart = (function(){ var d=new Date(), day=d.getDay(), diff=day===0?-6:1-day; d.setDate(d.getDate()+diff); return d; })();
+var activeTab        = 'weekly';
+
 // ===================== STORAGE — Supabase =====================
 // ── PASTE YOUR SUPABASE CREDENTIALS HERE ──────────────────────
 const SUPABASE_URL = 'https://kxfmwacpsxzghsogrgap.supabase.co';   // e.g. https://abcxyz.supabase.co
@@ -600,8 +609,7 @@ function showSaveFlash(msg) {
 }
 
 // ===================== DATA =====================
-let staff          = DEFAULT_STAFF;
-let editingStaffId = null;
+// (declared at top)
 
 /*
   DUTY TYPES:
@@ -649,7 +657,7 @@ const SPLIT = {key:'split', label:'Split duty', short:'SPLIT', time:'07:00–12:
 const DAYS  = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const DSHRT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
-let config = {minStaff:2, maxDays:5, rotation:4, splitRatio:3};
+// (declared at top)
 
 let rules = [
   {id:1,title:'Leave & absent staff excluded',desc:'Employees on leave or absent are not scheduled for any duty.',icon:'ti-calendar-off',enabled:true},
@@ -662,12 +670,12 @@ let rules = [
   {id:8,title:'Max consecutive duty days',desc:'No staff member is scheduled for more than the maximum configured consecutive days.',icon:'ti-calendar-stats',enabled:true},
 ];
 
-let customConditions = [];
-let schedule = {};
+// (declared at top)
+// (declared at top)
 
-// Rule states will be restored after async load in INIT
-let currentWeekStart = getMonday(new Date());
-let activeTab = 'weekly';
+// (rule states restored in async init below)
+// (declared at top)
+// (declared at top)
 
 // ===================== SCHEDULE GENERATION =====================
 /*
